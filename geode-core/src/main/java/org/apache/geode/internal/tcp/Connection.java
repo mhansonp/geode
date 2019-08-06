@@ -309,7 +309,7 @@ public class Connection implements Runnable {
   private List ackConnectionGroup;
 
   /** name of thread that we're currently performing an operation in (may be null) */
-  private String ackThreadName;
+  private Thread ackThread;
 
   /** the buffer used for message receipt */
   private ByteBuffer inputBuffer;
@@ -1905,16 +1905,16 @@ public class Connection implements Runnable {
     synchronized (this) {
       if (use && (ackWaitThreshold > 0 || ackSAThreshold > 0)) {
         // set times that events should be triggered
-        transmissionStartTime = startTime;
-        ackWaitTimeout = ackWaitThreshold;
-        ackSATimeout = ackSAThreshold;
-        ackConnectionGroup = connectionGroup;
-        ackThreadName = Thread.currentThread().getName();
+        this.transmissionStartTime = startTime;
+        this.ackWaitTimeout = ackWaitThreshold;
+        this.ackSATimeout = ackSAThreshold;
+        this.ackConnectionGroup = connectionGroup;
+        this.ackThread = Thread.currentThread();
       } else {
-        ackWaitTimeout = 0;
-        ackSATimeout = 0;
-        ackConnectionGroup = null;
-        ackThreadName = null;
+        this.ackWaitTimeout = 0;
+        this.ackSATimeout = 0;
+        this.ackConnectionGroup = null;
+        this.ackThread = null;
       }
       synchronized (stateLock) {
         connectionState = STATE_IDLE;
@@ -2020,7 +2020,7 @@ public class Connection implements Runnable {
       logger.fatal("{} seconds have elapsed waiting for a response from {} for thread {}",
           (ackWaitTimeout + ackSATimeout) / 1000L,
           getRemoteAddress(),
-          ackThreadName);
+          ackThread.getName());
       // turn off subsequent checks by setting the timeout to zero, then boot the member
       ackSATimeout = 0;
       return true;
@@ -2028,7 +2028,7 @@ public class Connection implements Runnable {
     if (!ackTimedOut && 0 < ackWaitTimeout
         && transmissionStartTime + ackWaitTimeout <= now) {
       logger.warn("{} seconds have elapsed waiting for a response from {} for thread {}",
-          ackWaitTimeout / 1000L, getRemoteAddress(), ackThreadName);
+          ackWaitTimeout / 1000L, getRemoteAddress(), ackThread.getName(), new Exception("DEBUG"));
       ackTimedOut = true;
 
       final String state = connectionState == Connection.STATE_SENDING

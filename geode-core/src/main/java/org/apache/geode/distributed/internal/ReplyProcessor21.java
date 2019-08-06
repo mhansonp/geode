@@ -666,82 +666,90 @@ public class ReplyProcessor21 implements MembershipListener {
       throw new InterruptedException();
     }
 
+    String threadName = Thread.currentThread().getName();
     if (stillWaiting()) {
-      long timeout = getAckWaitThreshold() * 1000L;
-      long timeSoFar = System.currentTimeMillis() - this.initTime;
-      final long severeAlertTimeout = getAckSevereAlertThresholdMS();
-      // only start SUSPECT processing if severe alerts are enabled
-      final boolean doSuspectProcessing =
-          isSevereAlertProcessingEnabled() && (severeAlertTimeout > 0);
-      if (timeout <= 0) {
-        timeout = Long.MAX_VALUE;
-      }
-      if (msecs == 0) {
-        boolean timedOut = false;
-        if (timeout <= timeSoFar + 1) {
-          timedOut = !latch.await(10);
+      // Start
+      try {
+        long timeout = getAckWaitThreshold() * 1000L;
+        long timeSoFar = System.currentTimeMillis() - this.initTime;
+        final long severeAlertTimeout = getAckSevereAlertThresholdMS();
+        // only start SUSPECT processing if severe alerts are enabled
+        final boolean doSuspectProcessing =
+            isSevereAlertProcessingEnabled() && (severeAlertTimeout > 0);
+        if (timeout <= 0) {
+          timeout = Long.MAX_VALUE;
         }
-        if (timedOut || !latch.await(timeout - timeSoFar - 1)) {
-          this.dmgr.getCancelCriterion().checkCancelInProgress(null);
-
-          timeout(doSuspectProcessing, false);
-
-          // If ack-severe-alert-threshold has been set, we now
-          // wait for that period of time and then force the non-responding
-          // members from the system. Then we wait indefinitely
-          if (doSuspectProcessing) {
-            boolean wasNotUnlatched;
-            do {
-              this.severeAlertTimerReset = false; // retry if this gets set by suspect processing
-                                                  // (splitbrain requirement)
-              wasNotUnlatched = !latch.await(severeAlertTimeout);
-            } while (wasNotUnlatched && this.severeAlertTimerReset);
-            if (wasNotUnlatched) {
-              this.dmgr.getCancelCriterion().checkCancelInProgress(null);
-              timeout(false, true);
-
-              long suspectProcessingErrorAlertTimeout = severeAlertTimeout * 3;
-              if (!latch.await(suspectProcessingErrorAlertTimeout)) {
-                long now = System.currentTimeMillis();
-                long totalTimeElapsed = now - this.initTime;
-
-                String waitingOnMembers;
-                synchronized (members) {
-                  waitingOnMembers = Arrays.toString(members);
-                }
-                logger.fatal("An additional " + suspectProcessingErrorAlertTimeout
-                    + " milliseconds have elapsed while waiting for replies. Total of "
-                    + totalTimeElapsed + " milliseconds elapsed (init time:" + this.initTime
-                    + ", now: " + now + ") Waiting for members: " + waitingOnMembers);
-
-                // for consistency, we must now wait indefinitely for a membership view
-                // that ejects the removed members
-                latch.await();
-              }
-            }
-          } else {
-            latch.await();
+        if (msecs == 0) {
+          boolean timedOut = false;
+          if (timeout <= timeSoFar + 1) {
+            timedOut = !latch.await(10);
           }
-          // Give an info message since timeout gave a warning.
-          logger.info("{} wait for replies completed", shortName());
-        }
-      } else if (msecs > timeout) {
-        if (!latch.await(timeout)) {
-          timeout(doSuspectProcessing, false);
-          // after timeout alert, wait remaining time
-          if (!latch.await(msecs - timeout)) {
-            logger.info("wait for replies timing out after {} seconds",
-                Long.valueOf(msecs / 1000));
+          if (timedOut || !latch.await(timeout - timeSoFar - 1)) {
+            this.dmgr.getCancelCriterion().checkCancelInProgress(null);
+
+            timeout(doSuspectProcessing, false);
+            Thread.currentThread().setName(threadName + " Waiting for response from " + membersToString());
+
+            // If ack-severe-alert-threshold has been set, we now
+            // wait for that period of time and then force the non-responding
+            // members from the system. Then we wait indefinitely
+            if (doSuspectProcessing) {
+              boolean wasNotUnlatched;
+              do {
+                this.severeAlertTimerReset = false; // retry if this gets set by suspect processing
+                // (splitbrain requirement)
+                wasNotUnlatched = !latch.await(severeAlertTimeout);
+              } while (wasNotUnlatched && this.severeAlertTimerReset);
+              if (wasNotUnlatched) {
+                this.dmgr.getCancelCriterion().checkCancelInProgress(null);
+                timeout(false, true);
+
+                long suspectProcessingErrorAlertTimeout = severeAlertTimeout * 3;
+                if (!latch.await(suspectProcessingErrorAlertTimeout)) {
+                  long now = System.currentTimeMillis();
+                  long totalTimeElapsed = now - this.initTime;
+
+                  String waitingOnMembers;
+                  synchronized (members) {
+                    waitingOnMembers = Arrays.toString(members);
+                  }
+                  logger.fatal("An additional " + suspectProcessingErrorAlertTimeout
+                      + " milliseconds have elapsed while waiting for replies. Total of "
+                      + totalTimeElapsed + " milliseconds elapsed (init time:" + this.initTime
+                      + ", now: " + now + ") Waiting for members: " + waitingOnMembers);
+
+                  // for consistency, we must now wait indefinitely for a membership view
+                  // that ejects the removed members
+                  latch.await();
+                }
+              }
+            } else {
+              latch.await();
+            }
+            // Give an info message since timeout gave a warning.
+            logger.info("{} wait for replies completed", shortName());
+          }
+        } else if (msecs > timeout) {
+          if (!latch.await(timeout)) {
+            timeout(doSuspectProcessing, false);
+            // after timeout alert, wait remaining time
+            if (!latch.await(msecs - timeout)) {
+              logger.info("wait for replies timing out after {} seconds",
+                  Long.valueOf(msecs / 1000));
+              return false;
+            }
+            // Give an info message since timeout gave a warning.
+            logger.info("{} wait for replies completed", shortName());
+          }
+        } else {
+          if (!latch.await(msecs)) {
             return false;
           }
-          // Give an info message since timeout gave a warning.
-          logger.info("{} wait for replies completed", shortName());
         }
-      } else {
-        if (!latch.await(msecs)) {
-          return false;
-        }
+      } finally {
+        Thread.currentThread().setName(threadName);
       }
+      // end
     }
     Assert.assertTrue(latch != this.latch || !stillWaiting(), this);
     if (stopBecauseOfExceptions()) {
