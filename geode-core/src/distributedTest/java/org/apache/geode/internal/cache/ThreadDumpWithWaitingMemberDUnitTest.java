@@ -16,10 +16,12 @@ package org.apache.geode.internal.cache;
 
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.apache.geode.test.dunit.VM.getHostName;
 import static org.apache.geode.test.dunit.VM.getVM;
 import static org.apache.geode.test.dunit.internal.JUnit4DistributedTestCase.getBlackboard;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.lang.management.LockInfo;
 import java.lang.management.ManagementFactory;
@@ -35,12 +37,18 @@ import sun.jvm.hotspot.StackTrace;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionFactory;
 import org.apache.geode.cache.RegionShortcut;
+import org.apache.geode.cache.client.ClientRegionFactory;
+import org.apache.geode.cache.client.ClientRegionShortcut;
+import org.apache.geode.cache.client.Pool;
+import org.apache.geode.cache.client.PoolManager;
+import org.apache.geode.cache.server.CacheServer;
 import org.apache.geode.distributed.internal.ClusterDistributionManager;
 import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.DistributionMessage;
 import org.apache.geode.distributed.internal.DistributionMessageObserver;
 import org.apache.geode.internal.cache.partitioned.PutMessage;
 import org.apache.geode.internal.logging.LogService;
+import org.apache.geode.test.awaitility.GeodeAwaitility;
 import org.apache.geode.test.dunit.AsyncInvocation;
 import org.apache.geode.test.dunit.VM;
 import org.apache.geode.test.dunit.rules.CacheRule;
@@ -86,13 +94,13 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
       cacheRule.createCache();
       createRegion(regionName, false);
-      DistributionMessageObserver.setInstance(new ThreadMessageObserver());
+      DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM0"));
     });
 
     vm1.invoke(() -> {
       cacheRule.createCache();
       createRegion(regionName, false);
-      DistributionMessageObserver.setInstance(new ThreadMessageObserver());
+      DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM1"));
     });
 
     AsyncInvocation vm0put = vm0.invokeAsync(() -> {
@@ -118,6 +126,73 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
   }
 
   @Test
+  public void testThreadDumpHasWaitingMemberWithClientOp() throws Exception {
+    VM vm0 = getVM(0);
+    VM vm1 = getVM(1);
+    VM vm2 = getVM(2);
+    
+    String hostName = getHostName();
+
+    getBlackboard().initBlackboard();
+
+    // Create region in one member
+    vm0.invoke(() -> {
+      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+          DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
+
+      cacheRule.createCache();
+      createRegion(regionName, false);
+      DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM0"));
+    });
+
+    int port = vm0.invoke(() -> startServer());
+
+    vm1.invoke(() -> {
+      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+          DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
+
+      cacheRule.createCache();
+      createRegion(regionName, false);
+      DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM1"));
+    });
+
+    AsyncInvocation vm2put = vm2.invokeAsync(() -> {
+      clientCacheRule.createClientCache();
+      createClientRegion(regionName, hostName, port);
+      Region region = clientCacheRule.getClientCache().getRegion(regionName);
+      LogService.getLogger().info("#### adding data into region.");
+      region.put("KEY-1", "VALUE-1");
+    });
+
+    AsyncInvocation vm0put = vm0.invokeAsync(() -> {
+      GeodeAwaitility.await().until(() ->
+          getBlackboard().isGateSignaled("PutReceivedOnVM1") ||
+              getBlackboard().isGateSignaled("PutReceivedOnVM0"));
+
+      if (getBlackboard().isGateSignaled("PutReceivedOnVM1")) {
+        takeThreadDump();
+        getBlackboard().signalGate("ThreadDumpTakenOnVM0");
+      }
+
+    });
+
+    AsyncInvocation vm1put = vm1.invokeAsync(() -> {
+      GeodeAwaitility.await().until(() ->
+          getBlackboard().isGateSignaled("PutReceivedOnVM1") ||
+              getBlackboard().isGateSignaled("PutReceivedOnVM0"));
+
+      if (getBlackboard().isGateSignaled("PutReceivedOnVM0")) {
+        takeThreadDump();
+        getBlackboard().signalGate("ThreadDumpTakenOnVM1");
+      }
+    });
+
+    vm0put.join();
+    vm1put.join();
+    vm2put.join();
+  }
+
+  @Test
   public void testThreadDumpHasWaitingMemberWithDirectAck() throws Exception {
     VM vm0 = getVM(0);
     VM vm1 = getVM(1);
@@ -133,7 +208,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
       cacheRule.createCache();
       createRegion(regionName, false);
-      DistributionMessageObserver.setInstance(new ThreadMessageObserver());
+      DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM0"));
     });
 
     vm1.invoke(() -> {
@@ -142,7 +217,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
       cacheRule.createCache();
       createRegion(regionName, false);
-      DistributionMessageObserver.setInstance(new ThreadMessageObserver());
+      DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM1"));
     });
 
     AsyncInvocation vm0put = vm0.invokeAsync(() -> {
@@ -167,6 +242,13 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
   }
 
+  private int startServer() throws IOException {
+    CacheServer server = cacheRule.getCache().addCacheServer();
+    server.setPort(0);
+    server.start();
+    return server.getPort();
+  }
+
   private void createRegion(String regionName, boolean addAsyncEventQueueId) {
     RegionFactory rf = cacheRule.getCache().createRegionFactory(RegionShortcut.REPLICATE);
     if (addAsyncEventQueueId) {
@@ -175,17 +257,19 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
     rf.create(regionName);
   }
 
-  private void createRegion(String regionName, Class exception) {
-    RegionFactory rf = cacheRule.getCache().createRegionFactory(RegionShortcut.REPLICATE)
-        .addAsyncEventQueueId("aeqId");
-    assertThatThrownBy(() -> rf.create(regionName)).isInstanceOf(exception);
+  private void createClientRegion(String regionName, String hostName, int port) {
+    Pool pool = PoolManager.createFactory().addServer(hostName, port).create("clientPool");
+
+    ClientRegionFactory rf = clientCacheRule.getClientCache().createClientRegionFactory(
+        ClientRegionShortcut.CACHING_PROXY);
+    rf.setPoolName(pool.getName()).create(regionName);
   }
 
   private void takeThreadDump() {
     ThreadMXBean bean = ManagementFactory.getThreadMXBean();
     ThreadInfo[] infos = bean.dumpAllThreads(true, true);
     for (ThreadInfo info : infos) {
-      LogService.getLogger().info("\n" + dump(info));
+      System.out.println("\n" + dump(info));
     }
   }
 
@@ -260,14 +344,21 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
   private class ThreadMessageObserver extends DistributionMessageObserver {
 
+    String vmName;
+
+    ThreadMessageObserver(String vmName) {
+      this.vmName = vmName;
+    }
+
     @Override
     public void beforeProcessMessage(ClusterDistributionManager dm, DistributionMessage message) {
       LogService.getLogger().info("#### Message is :" + message);
       if (message instanceof UpdateOperation.UpdateMessage) {
+        LogService.getLogger().info("#### Processing UpdateOperation.UpdateMessage");
         try {
           Thread.sleep(ACK_WAIT_THRESHOLD.intValue() * 1000);
-          getBlackboard().signalGate("PutReceivedOnVM1");
-          getBlackboard().waitForGate("ThreadDumpTakenOnVM0", 30, SECONDS);
+          getBlackboard().signalGate("PutReceivedOn" + vmName);
+          getBlackboard().waitForGate("ThreadDumpTakenOn" + (vmName.equals("VM0") ? "VM1" : "VM0"), 30, SECONDS);
         } catch (Exception ex) {
         }
       }

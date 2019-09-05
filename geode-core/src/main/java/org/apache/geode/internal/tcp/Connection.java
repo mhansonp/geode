@@ -2661,8 +2661,13 @@ public class Connection implements Runnable {
     socketInUse = true;
     MsgReader msgReader = null;
     DMStats stats = owner.getConduit().getStats();
+    String threadName = Thread.currentThread().getName();
     final KnownVersion version = getRemoteVersion();
     try {
+      Thread.currentThread().setName(threadName + " Waiting for response from: "
+          + getRemoteAddress().getHost() + "("
+          + getRemoteAddress().getMembershipPort() + ")");
+
       msgReader = new MsgReader(this, ioFilter, version);
 
       ReplyMessage msg;
@@ -2730,6 +2735,7 @@ public class Connection implements Runnable {
       }
       throw new ConnectionException(String.format("Unable to read direct ack because: %s", e));
     } finally {
+      Thread.currentThread().setName(threadName);
       stats.incProcessedMessages(1L);
       accessed();
       socketInUse = origSocketInUse;

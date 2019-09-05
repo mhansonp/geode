@@ -381,25 +381,25 @@ public class DirectChannel {
 
     ConnectExceptions ce = cumulativeExceptions;
 
-    for (Iterator it = sentCons.iterator(); it.hasNext();) {
-      Connection con = (Connection) it.next();
-      // We don't expect replies on shared connections.
-      if (con.isSharedResource()) {
-        continue;
-      }
-      try {
+      for (Iterator it = sentCons.iterator(); it.hasNext(); ) {
+        Connection con = (Connection) it.next();
+        // We don't expect replies on shared connections.
+        if (con.isSharedResource()) {
+          continue;
+        }
         try {
-          con.readAck(processor);
-        } catch (SocketTimeoutException ex) {
-          handleAckTimeout(ackTimeout, ackSDTimeout, con, processor);
+          try {
+            con.readAck(processor);
+          } catch (SocketTimeoutException ex) {
+            handleAckTimeout(ackTimeout, ackSDTimeout, con, processor);
+          }
+        } catch (ConnectionException conEx) {
+          if (ce == null) {
+            ce = new ConnectExceptions();
+          }
+          ce.addFailure(con.getRemoteAddress(), conEx);
         }
-      } catch (ConnectionException conEx) {
-        if (ce == null) {
-          ce = new ConnectExceptions();
-        }
-        ce.addFailure(con.getRemoteAddress(), conEx);
       }
-    }
     return ce;
   }
 
