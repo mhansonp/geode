@@ -44,7 +44,7 @@ public class BlogCodeOperationController extends AbstractManagementController {
   @ApiOperation(value = "start blogCode")
   @PreAuthorize("@securityService.authorize('DATA', 'MANAGE')")
   @PostMapping(BLOG_CODE_ENDPOINT)
-  public ResponseEntity<ClusterManagementOperationResult<BlogCodeRequest, BlogCodeResponse>> startRestoreRedundancy(
+  public ResponseEntity<ClusterManagementOperationResult<BlogCodeRequest, BlogCodeResponse>> startBlogCode(
       @RequestBody BlogCodeRequest operation) {
     operation.setOperator(
         Optional.ofNullable(securityService).map(SecurityService::getSubject).map(Object::toString)
