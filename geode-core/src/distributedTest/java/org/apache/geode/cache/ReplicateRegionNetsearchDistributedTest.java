@@ -18,11 +18,11 @@ import static org.apache.geode.cache.EvictionAttributes.createLRUEntryAttributes
 import static org.apache.geode.distributed.ConfigurationProperties.ENABLE_CLUSTER_CONFIGURATION;
 import static org.apache.geode.distributed.ConfigurationProperties.LOCATORS;
 import static org.apache.geode.internal.util.ArrayUtils.asList;
-import static org.apache.geode.test.dunit.VM.getVM;
 import static org.apache.geode.test.dunit.rules.DistributedRule.getLocatorPort;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 
 import org.junit.Before;
@@ -67,31 +67,16 @@ public class ReplicateRegionNetsearchDistributedTest implements Serializable {
   public SerializableTemporaryFolder temporaryFolder = new SerializableTemporaryFolder();
 
   @Before
-  public void setUp() throws Exception {
-    replicate1 = getVM(0);
-    replicate2 = getVM(1);
-    proxy = getVM(2);
-    client = getVM(3);
-
-    replicate1Dir = temporaryFolder.newFolder(REPLICATE_1_NAME);
-    replicate2Dir = temporaryFolder.newFolder(REPLICATE_2_NAME);
-    proxyDir = temporaryFolder.newFolder(PROXY_NAME);
-
-    int locatorPort = getLocatorPort();
-
-    replicate1.invoke(() -> {
-      serverLauncher.set(startServer(REPLICATE_1_NAME, replicate1Dir, locatorPort));
-    });
-    replicate2.invoke(() -> {
-      serverLauncher.set(startServer(REPLICATE_2_NAME, replicate2Dir, locatorPort));
-    });
-    proxy.invoke(() -> {
-      serverLauncher.set(startServer(PROXY_NAME, proxyDir, locatorPort));
-    });
-  }
+  public void setUp() throws Exception {}
 
   @Test
-  public void proxyReplicateDoesNetsearchFromFullReplicate() {
+  public void proxyReplicateDoesNetsearchFromFullReplicate() throws IOException {
+    getVMsForTests(VM.getVM(0), VM.getVM(1), VM.getVM(2), VM.getVM(3));
+
+    assignFolders();
+
+    startServers();
+
     replicate1.invoke(() -> {
       Region<String, String> region = serverLauncher.get().getCache()
           .<String, String>createRegionFactory(RegionShortcut.REPLICATE)
@@ -121,7 +106,13 @@ public class ReplicateRegionNetsearchDistributedTest implements Serializable {
   }
 
   @Test
-  public void fullReplicateDoesNotPerformNetsearch() {
+  public void fullReplicateDoesNotPerformNetsearch() throws IOException {
+    getVMsForTests(VM.getVM(0), VM.getVM(1), VM.getVM(2), VM.getVM(3));
+
+    assignFolders();
+
+    startServers();
+
     replicate1.invoke(() -> {
       Region<String, String> region = serverLauncher.get().getCache()
           .<String, String>createRegionFactory(RegionShortcut.REPLICATE)
@@ -150,7 +141,13 @@ public class ReplicateRegionNetsearchDistributedTest implements Serializable {
   }
 
   @Test
-  public void replicateWithExpirationDoesNetsearchOnMiss() {
+  public void replicateWithExpirationDoesNetsearchOnMiss() throws IOException {
+    getVMsForTests(VM.getVM(0), VM.getVM(1), VM.getVM(2), VM.getVM(3));
+
+    assignFolders();
+
+    startServers();
+
     replicate1.invoke(() -> {
       Region<String, String> region = serverLauncher.get().getCache()
           .<String, String>createRegionFactory(RegionShortcut.REPLICATE)
@@ -300,7 +297,13 @@ public class ReplicateRegionNetsearchDistributedTest implements Serializable {
   }
 
   @Test
-  public void proxyReplicateDoesNetsearchFromOnlyOneFullReplicate() {
+  public void proxyReplicateDoesNetsearchFromOnlyOneFullReplicate() throws IOException {
+    getVMsForTests(VM.getVM(0), VM.getVM(1), VM.getVM(2), VM.getVM(3));
+
+    assignFolders();
+
+    startServers();
+
     replicate1.invoke(() -> {
       Region<String, String> region = serverLauncher.get().getCache()
           .<String, String>createRegionFactory(RegionShortcut.REPLICATE)
@@ -403,7 +406,13 @@ public class ReplicateRegionNetsearchDistributedTest implements Serializable {
   }
 
   @Test
-  public void clientGetFromProxyReplicateDoesNetsearchFromFullReplicate() {
+  public void clientGetFromProxyReplicateDoesNetsearchFromFullReplicate() throws IOException {
+    getVMsForTests(VM.getVM(0), VM.getVM(1), VM.getVM(2), VM.getVM(3));
+
+    assignFolders();
+
+    startServers();
+
     replicate1.invoke(() -> {
       Region<String, String> region = serverLauncher.get().getCache()
           .<String, String>createRegionFactory(RegionShortcut.REPLICATE)
@@ -525,6 +534,135 @@ public class ReplicateRegionNetsearchDistributedTest implements Serializable {
     });
   }
 
+  @Test
+  public void oldClientGetFromProxyReplicateDoesNetsearchFromFullReplicate() throws IOException {
+    replicate1 = VM.getVM("1.10.0", 0);
+    replicate2 = VM.getVM("1.10.0", 1);
+    proxy = VM.getVM("1.10.0", 2);
+    client = VM.getVM("1.8.0", 3);
+
+    assignFolders();
+
+    startServers();
+
+    replicate1.invoke(() -> {
+      Region<String, String> region = serverLauncher.get().getCache()
+          .<String, String>createRegionFactory(RegionShortcut.REPLICATE)
+          .create(REGION_NAME);
+
+      region.put("key-1", "value-1");
+    });
+
+    replicate2.invoke(() -> {
+      Region<String, String> region = serverLauncher.get().getCache()
+          .<String, String>createRegionFactory(RegionShortcut.REPLICATE)
+          .create(REGION_NAME);
+      CachePerfStats regionPerfStats = getRegionPerfStats(region);
+
+      assertThat(regionPerfStats.getGets()).isZero();
+      assertThat(regionPerfStats.getGetInitialImagesCompleted()).isOne();
+      assertThat(regionPerfStats.getMisses()).isZero();
+      assertThat(regionPerfStats.getNetsearchesCompleted()).isZero();
+    });
+
+    int proxyServerPort = proxy.invoke(() -> {
+      Region<String, String> region = serverLauncher.get().getCache()
+          .<String, String>createRegionFactory(RegionShortcut.REPLICATE_PROXY)
+          .create(REGION_NAME);
+      CachePerfStats regionPerfStats = getRegionPerfStats(region);
+
+      assertThat(regionPerfStats.getGets()).isZero();
+      assertThat(regionPerfStats.getGetInitialImagesCompleted()).isZero();
+      assertThat(regionPerfStats.getMisses()).isZero();
+      assertThat(regionPerfStats.getNetsearchesCompleted()).isZero();
+      return serverLauncher.get().getCache().getCacheServers().get(0).getPort();
+    });
+
+    client.invoke(() -> {
+      clientCache.set(new ClientCacheFactory()
+          .addPoolServer("localhost", proxyServerPort)
+          .create());
+      Region<String, String> region = clientCache.get()
+          .<String, String>createClientRegionFactory(ClientRegionShortcut.PROXY)
+          .create(REGION_NAME);
+      CachePerfStats regionPerfStats = getRegionPerfStats(region);
+
+      // assertThat(regionPerfStats.getGets()).isZero();
+      assertThat(regionPerfStats.getGetInitialImagesCompleted()).isZero();
+      // assertThat(regionPerfStats.getMisses()).isZero();
+      assertThat(regionPerfStats.getNetsearchesCompleted()).isZero();
+    });
+
+    for (VM vm : asList(replicate1, replicate2, proxy)) {
+      vm.invoke(() -> {
+        Region<String, String> region = serverLauncher.get().getCache().getRegion(REGION_NAME);
+        CachePerfStats regionPerfStats = getRegionPerfStats(region);
+
+        assertThat(regionPerfStats.getGets()).isZero();
+        assertThat(regionPerfStats.getMisses()).isZero();
+        assertThat(regionPerfStats.getNetsearchesCompleted()).isZero();
+      });
+    }
+
+    client.invoke(() -> {
+      Region<String, String> region = clientCache.get().getRegion(REGION_NAME);
+      CachePerfStats regionPerfStats = getRegionPerfStats(region);
+
+      assertThat(region.get("key-1")).isEqualTo("value-1");
+
+      // assertThat(regionPerfStats.getGets()).isOne();
+      // assertThat(regionPerfStats.getMisses()).isOne();
+      assertThat(regionPerfStats.getNetsearchesCompleted()).isZero();
+    });
+
+    for (VM vm : asList(replicate1, replicate2)) {
+      vm.invoke(() -> {
+        Region<String, String> region = serverLauncher.get().getCache().getRegion(REGION_NAME);
+        CachePerfStats regionPerfStats = getRegionPerfStats(region);
+
+        assertThat(regionPerfStats.getGets()).isZero();
+        assertThat(regionPerfStats.getMisses()).isZero();
+        assertThat(regionPerfStats.getNetsearchesCompleted()).isZero();
+      });
+    }
+
+    proxy.invoke(() -> {
+      Region<String, String> region = serverLauncher.get().getCache().getRegion(REGION_NAME);
+      CachePerfStats regionPerfStats = getRegionPerfStats(region);
+
+      assertThat(regionPerfStats.getGets()).isOne();
+      assertThat(regionPerfStats.getMisses()).isOne();
+      assertThat(regionPerfStats.getNetsearchesCompleted()).isOne();
+    });
+  }
+
+  private void getVMsForTests(VM vm, VM vm2, VM vm3, VM vm4) {
+    replicate1 = vm;
+    replicate2 = vm2;
+    proxy = vm3;
+    client = vm4;
+  }
+
+  private void assignFolders() throws IOException {
+    replicate1Dir = temporaryFolder.newFolder(REPLICATE_1_NAME);
+    replicate2Dir = temporaryFolder.newFolder(REPLICATE_2_NAME);
+    proxyDir = temporaryFolder.newFolder(PROXY_NAME);
+  }
+
+  private void startServers() {
+    int locatorPort = getLocatorPort();
+
+    replicate1.invoke(() -> {
+      serverLauncher.set(startServer(REPLICATE_1_NAME, replicate1Dir, locatorPort));
+    });
+    replicate2.invoke(() -> {
+      serverLauncher.set(startServer(REPLICATE_2_NAME, replicate2Dir, locatorPort));
+    });
+    proxy.invoke(() -> {
+      serverLauncher.set(startServer(PROXY_NAME, proxyDir, locatorPort));
+    });
+  }
+
   private ServerLauncher startServer(String serverName, File serverDir, int locatorPort) {
     ServerLauncher serverLauncher = new ServerLauncher.Builder()
         .setMemberName(serverName)
@@ -540,6 +678,6 @@ public class ReplicateRegionNetsearchDistributedTest implements Serializable {
   }
 
   private CachePerfStats getRegionPerfStats(Region<?, ?> region) {
-    return ((InternalRegion) region).getRegionPerfStats();
+    return ((InternalRegion) region).getCachePerfStats();
   }
 }
