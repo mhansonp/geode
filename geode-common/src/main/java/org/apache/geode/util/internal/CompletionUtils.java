@@ -41,7 +41,7 @@ public class CompletionUtils {
   /**
    * Opens the {@code CountDownLatch} by counting it down.
    */
-  public static void close(CountDownLatch countDownLatch) {
+  public static void openLatch(CountDownLatch countDownLatch) {
     while (countDownLatch.getCount() > 0) {
       countDownLatch.countDown();
     }
@@ -50,14 +50,14 @@ public class CompletionUtils {
   /**
    * Sets the {@code AtomicBoolean} to false.
    */
-  public static void close(AtomicBoolean atomicBoolean) {
+  public static void toFalse(AtomicBoolean atomicBoolean) {
     atomicBoolean.set(false);
   }
 
   /**
-   * Sets the {@code AtomicReference} to null.
+   * Opens the {@code AtomicReference} to null.
    */
-  public static void close(AtomicReference<?> atomicReference) {
+  public static void toNull(AtomicReference<?> atomicReference) {
     atomicReference.set(null);
   }
 }
