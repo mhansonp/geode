@@ -504,7 +504,7 @@ public class ServerLocator implements TcpHandler, RestartHandler, DistributionAd
    * with the current load on that server
    */
 
-  public Map getLoadMap() {
+  public Map<ServerLocation, ServerLoad> getLoadMap() {
     return loadSnapshot.getLoadMap();
   }
 

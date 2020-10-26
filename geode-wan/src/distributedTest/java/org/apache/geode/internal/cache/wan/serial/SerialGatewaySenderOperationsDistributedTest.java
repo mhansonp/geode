@@ -32,8 +32,8 @@ import static org.apache.geode.internal.AvailablePortHelper.getRandomAvailableTC
 import static org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID.getNewProxyMembership;
 import static org.apache.geode.test.awaitility.GeodeAwaitility.await;
 import static org.apache.geode.test.dunit.IgnoredException.addIgnoredException;
-import static org.apache.geode.test.dunit.VM.getCurrentVMNum;
 import static org.apache.geode.test.dunit.VM.getVM;
+import static org.apache.geode.test.dunit.VM.getVMId;
 import static org.apache.geode.test.dunit.VM.toArray;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -87,21 +87,21 @@ import org.apache.geode.distributed.internal.ServerLocator;
 import org.apache.geode.internal.cache.ForceReattemptException;
 import org.apache.geode.internal.cache.InternalRegion;
 import org.apache.geode.internal.cache.RegionQueue;
-import org.apache.geode.internal.cache.tier.sockets.CacheServerTestUtil;
 import org.apache.geode.internal.cache.tier.sockets.ClientProxyMembershipID;
 import org.apache.geode.internal.cache.wan.AbstractGatewaySenderEventProcessor;
 import org.apache.geode.internal.cache.wan.GatewaySenderException;
 import org.apache.geode.internal.cache.wan.InternalGatewaySender;
 import org.apache.geode.internal.cache.wan.InternalGatewaySenderFactory;
-import org.apache.geode.internal.cache.wan.parallel.ParallelGatewaySenderQueue;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.test.dunit.AsyncInvocation;
 import org.apache.geode.test.dunit.IgnoredException;
 import org.apache.geode.test.dunit.VM;
 import org.apache.geode.test.dunit.cache.CacheTestCase;
+import org.apache.geode.test.dunit.rules.DistributedRule;
 import org.apache.geode.test.junit.categories.WanTest;
 import org.apache.geode.test.junit.rules.serializable.SerializableTemporaryFolder;
 import org.apache.geode.test.junit.runners.CategoryWithParameterizedRunnerFactory;
+import org.apache.geode.util.internal.GeodeGlossary;
 
 @Category(WanTest.class)
 @RunWith(Parameterized.class)
@@ -114,6 +114,9 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
   public static Collection<Integer> data() {
     return asList(1, 3, 5);
   }
+
+  @Rule
+  public DistributedRule distributedRule = new DistributedRule();
 
   @Parameter
   public int numDispatchers;
@@ -158,8 +161,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
 
   @Test
   public void testSerialGatewaySenderOperationsWithoutStarting() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -173,8 +176,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -187,14 +190,14 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
     vm4.invoke(() -> doPuts(className + "_RR", 100));
 
-    vm4.invoke(() -> validateSenderOperations("ln"));
-    vm5.invoke(() -> validateSenderOperations("ln"));
+    vm4.invoke(this::validateSenderOperations);
+    vm5.invoke(this::validateSenderOperations);
   }
 
   @Test
   public void testStartPauseResumeSerialGatewaySender() throws Exception {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -208,8 +211,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -222,30 +225,30 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm4.invoke(() -> doPuts(className + "_RR", 100));
 
-    vm4.invoke(() -> pauseSender("ln"));
-    vm5.invoke(() -> pauseSender("ln"));
+    vm4.invoke(this::pauseSender);
+    vm5.invoke(this::pauseSender);
 
-    vm4.invoke(() -> validateSenderPausedState("ln"));
-    vm5.invoke(() -> validateSenderPausedState("ln"));
+    vm4.invoke(this::validateSenderPausedState);
+    vm5.invoke(this::validateSenderPausedState);
 
-    AsyncInvocation doPutsInVm4 =
+    AsyncInvocation<Object> doPutsInVm4 =
         vm4.invokeAsync(() -> doPuts(className + "_RR", 10));
 
-    vm4.invoke(() -> resumeSender("ln"));
-    vm5.invoke(() -> resumeSender("ln"));
+    vm4.invoke(this::resumeSender);
+    vm5.invoke(this::resumeSender);
 
-    vm4.invoke(() -> validateSenderResumedState("ln"));
-    vm5.invoke(() -> validateSenderResumedState("ln"));
+    vm4.invoke(this::validateSenderResumedState);
+    vm5.invoke(this::validateSenderResumedState);
 
     doPutsInVm4.await();
 
-    vm4.invoke(() -> validateQueueContents("ln", 0));
-    vm5.invoke(() -> validateQueueContents("ln", 0));
+    vm4.invoke(() -> validateQueueContents(0));
+    vm5.invoke(() -> validateQueueContents(0));
 
     vm2.invoke(() -> validateRegionSize(className + "_RR", 100));
     vm3.invoke(() -> validateRegionSize(className + "_RR", 100));
@@ -253,8 +256,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
 
   @Test
   public void testStopSerialGatewaySender() throws Exception {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -268,8 +271,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -282,7 +285,7 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm4.invoke(() -> doPuts(className + "_RR", 20));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm4.invoke(() -> doPuts(className + "_RR", 20));
@@ -290,62 +293,62 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm2.invoke(() -> validateRegionSize(className + "_RR", 20));
     vm3.invoke(() -> validateRegionSize(className + "_RR", 20));
 
-    vm2.invoke(() -> stopReceivers());
-    vm3.invoke(() -> stopReceivers());
+    vm2.invoke(this::stopReceivers);
+    vm3.invoke(this::stopReceivers);
 
     vm4.invoke(() -> doPuts(className + "_RR", 20));
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 20));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 20));
+    vm4.invoke(() -> validateQueueSizeStat(20));
+    vm5.invoke(() -> validateQueueSizeStat(20));
 
-    vm4.invoke(() -> stopSender("ln"));
-    vm5.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::stopSender);
+    vm5.invoke(this::stopSender);
 
-    vm4.invoke(() -> validateSenderStoppedState("ln"));
-    vm5.invoke(() -> validateSenderStoppedState("ln"));
+    vm4.invoke(this::validateSenderStoppedState);
+    vm5.invoke(this::validateSenderStoppedState);
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 20));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 20));
+    vm4.invoke(() -> validateQueueSizeStat(20));
+    vm5.invoke(() -> validateQueueSizeStat(20));
     /*
      * Should have no effect on GatewaySenderState
      */
-    vm4.invoke(() -> resumeSender("ln"));
-    vm5.invoke(() -> resumeSender("ln"));
+    vm4.invoke(this::resumeSender);
+    vm5.invoke(this::resumeSender);
 
-    vm4.invoke(() -> validateSenderStoppedState("ln"));
-    vm5.invoke(() -> validateSenderStoppedState("ln"));
+    vm4.invoke(this::validateSenderStoppedState);
+    vm5.invoke(this::validateSenderStoppedState);
 
-    AsyncInvocation startSenderInVm4 = vm4.invokeAsync(() -> startSender("ln"));
-    AsyncInvocation startSenderInVm5 = vm5.invokeAsync(() -> startSender("ln"));
+    AsyncInvocation<Object> startSenderInVm4 = vm4.invokeAsync(this::startSender);
+    AsyncInvocation<Object> startSenderInVm5 = vm5.invokeAsync(this::startSender);
 
     startSenderInVm4.await();
     startSenderInVm5.await();
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 20));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 20));
+    vm4.invoke(() -> validateQueueSizeStat(20));
+    vm5.invoke(() -> validateQueueSizeStat(20));
 
     vm5.invoke(() -> doPuts(className + "_RR", 110));
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 130));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 130));
+    vm4.invoke(() -> validateQueueSizeStat(130));
+    vm5.invoke(() -> validateQueueSizeStat(130));
 
-    vm2.invoke(() -> startReceivers());
-    vm3.invoke(() -> startReceivers());
+    vm2.invoke(this::startReceivers);
+    vm3.invoke(this::startReceivers);
 
-    vm4.invoke(() -> validateSenderResumedState("ln"));
-    vm5.invoke(() -> validateSenderResumedState("ln"));
+    vm4.invoke(this::validateSenderResumedState);
+    vm5.invoke(this::validateSenderResumedState);
 
     vm2.invoke(() -> validateRegionSize(className + "_RR", 110));
     vm3.invoke(() -> validateRegionSize(className + "_RR", 110));
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 0));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 0));
+    vm4.invoke(() -> validateQueueSizeStat(0));
+    vm5.invoke(() -> validateQueueSizeStat(0));
   }
 
   @Test
   public void testRestartSerialGatewaySendersWhilePutting() throws Exception {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -359,8 +362,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -373,7 +376,7 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm7.invoke(() -> doPuts(className + "_RR", 20));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm7.invoke(() -> doPuts(className + "_RR", 20));
@@ -381,36 +384,36 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm2.invoke(() -> validateRegionSize(className + "_RR", 20));
     vm3.invoke(() -> validateRegionSize(className + "_RR", 20));
 
-    vm4.invoke(() -> stopSender("ln"));
-    vm5.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::stopSender);
+    vm5.invoke(this::stopSender);
 
-    vm4.invoke(() -> validateSenderStoppedState("ln"));
-    vm5.invoke(() -> validateSenderStoppedState("ln"));
+    vm4.invoke(this::validateSenderStoppedState);
+    vm5.invoke(this::validateSenderStoppedState);
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 0));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 0));
+    vm4.invoke(() -> validateQueueSizeStat(0));
+    vm5.invoke(() -> validateQueueSizeStat(0));
 
     // do a lot of puts while senders are restarting
-    AsyncInvocation doPutsInVm7 = vm7.invokeAsync(() -> doPuts(className + "_RR", 5000));
+    AsyncInvocation<Object> doPutsInVm7 = vm7.invokeAsync(() -> doPuts(className + "_RR", 5000));
 
-    AsyncInvocation startSenderInVm4 = vm4.invokeAsync(() -> startSender("ln"));
-    AsyncInvocation startSenderInVm5 = vm5.invokeAsync(() -> startSender("ln"));
+    AsyncInvocation<Object> startSenderInVm4 = vm4.invokeAsync(this::startSender);
+    AsyncInvocation<Object> startSenderInVm5 = vm5.invokeAsync(this::startSender);
 
     startSenderInVm4.await();
     startSenderInVm5.await();
 
     doPutsInVm7.await();
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 0));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 0));
-    vm4.invoke(() -> validateSecondaryQueueSizeStat("ln", 0));
-    vm5.invoke(() -> validateSecondaryQueueSizeStat("ln", 0));
+    vm4.invoke(() -> validateQueueSizeStat(0));
+    vm5.invoke(() -> validateQueueSizeStat(0));
+    vm4.invoke(this::validateSecondaryQueueSizeStat);
+    vm5.invoke(this::validateSecondaryQueueSizeStat);
   }
 
   @Test
   public void testSerialGatewaySendersPrintQueueContents() throws Exception {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -424,8 +427,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -436,17 +439,17 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm7.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
-    vm4.invoke(() -> pauseSender("ln"));
-    vm5.invoke(() -> pauseSender("ln"));
+    vm4.invoke(this::pauseSender);
+    vm5.invoke(this::pauseSender);
 
     vm7.invoke(() -> doPuts(className + "_RR", 20));
 
     await()
         .until(() -> stream(toArray(vm4, vm5))
             .map(vm -> vm.invoke(() -> {
-              InternalGatewaySender sender = findInternalGatewaySender("ln");
+              InternalGatewaySender sender = findInternalGatewaySender();
               logger.info(displaySerialQueueContent(sender));
               return sender.getEventQueueSize();
             }))
@@ -454,22 +457,22 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
             .sum(),
             greaterThan(0));
 
-    AsyncInvocation resumeSenderInVm4 = vm4.invokeAsync(() -> resumeSender("ln"));
-    AsyncInvocation resumeSenderInVm5 = vm5.invokeAsync(() -> resumeSender("ln"));
+    AsyncInvocation<Object> resumeSenderInVm4 = vm4.invokeAsync(this::resumeSender);
+    AsyncInvocation<Object> resumeSenderInVm5 = vm5.invokeAsync(this::resumeSender);
 
     resumeSenderInVm4.await();
     resumeSenderInVm5.await();
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 0));
-    vm5.invoke(() -> validateQueueSizeStat("ln", 0));
-    vm4.invoke(() -> validateSecondaryQueueSizeStat("ln", 0));
-    vm5.invoke(() -> validateSecondaryQueueSizeStat("ln", 0));
+    vm4.invoke(() -> validateQueueSizeStat(0));
+    vm5.invoke(() -> validateQueueSizeStat(0));
+    vm4.invoke(this::validateSecondaryQueueSizeStat);
+    vm5.invoke(this::validateSecondaryQueueSizeStat);
   }
 
   @Test
   public void testStopOneSerialGatewaySenderBothPrimary() throws Exception {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -483,8 +486,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -495,14 +498,14 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm7.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm4.invoke(() -> doPuts(className + "_RR", 100));
 
-    vm4.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::stopSender);
 
-    vm4.invoke(() -> validateSenderStoppedState("ln"));
+    vm4.invoke(this::validateSenderStoppedState);
 
     vm4.invoke(() -> doPuts(className + "_RR", 200));
 
@@ -510,24 +513,24 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm3.invoke(() -> validateRegionSize(className + "_RR", 200));
 
     // Do some puts from both vm4 and vm5 while restarting a sender
-    AsyncInvocation doPutsInVm4 =
+    AsyncInvocation<Object> doPutsInVm4 =
         vm4.invokeAsync(() -> doPuts(className + "_RR", 300));
 
     Thread.sleep(10);
-    vm4.invoke(() -> startSender("ln"));
+    vm4.invoke(this::startSender);
 
     doPutsInVm4.await();
 
     vm2.invoke(() -> validateRegionSize(className + "_RR", 300));
     vm3.invoke(() -> validateRegionSize(className + "_RR", 300));
 
-    vm4.invoke(() -> validateQueueSizeStat("ln", 0));
+    vm4.invoke(() -> validateQueueSizeStat(0));
   }
 
   @Test
   public void testStopOneSerialGatewaySender_PrimarySecondary() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -541,8 +544,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -553,14 +556,14 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm7.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
 
-    vm4.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::stopSender);
 
-    vm4.invoke(() -> validateSenderStoppedState("ln"));
+    vm4.invoke(this::validateSenderStoppedState);
 
     vm4.invoke(() -> doPuts(className + "_RR", 100));
 
@@ -570,26 +573,26 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
 
   @Test
   public void testStopOneSender_StartAnotherSender() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     vm2.invoke(() -> createCache(nyPort));
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
-    vm2.invoke(() -> createReceiver());
+    vm2.invoke(this::createReceiver);
 
     vm4.invoke(() -> createCache(lnPort));
-    vm4.invoke(() -> createSenderInVm4());
+    vm4.invoke(this::createSenderInVm4);
     vm4.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
-    vm4.invoke(() -> startSender("ln"));
+    vm4.invoke(this::startSender);
 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
-    vm4.invoke(() -> stopSender("ln"));
-    vm4.invoke(() -> validateSenderStoppedState("ln"));
+    vm4.invoke(this::stopSender);
+    vm4.invoke(this::validateSenderStoppedState);
 
     vm5.invoke(() -> createCache(lnPort));
-    vm5.invoke(() -> createSenderInVm5());
+    vm5.invoke(this::createSenderInVm5);
     vm5.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
-    vm5.invoke(() -> startSender("ln"));
+    vm5.invoke(this::startSender);
 
     vm5.invoke(() -> doPuts(className + "_RR", 100));
 
@@ -598,46 +601,46 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
 
   @Test
   public void test_Bug44153_StopOneSender_StartAnotherSender_CheckQueueSize() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     vm4.invoke(() -> createCache(lnPort));
-    vm4.invoke(() -> createSenderInVm4());
+    vm4.invoke(this::createSenderInVm4);
     vm4.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
-    vm4.invoke(() -> startSender("ln"));
+    vm4.invoke(this::startSender);
 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
-    vm4.invoke(() -> validateQueueContents("ln", 10));
-    vm4.invoke(() -> stopSender("ln"));
+    vm4.invoke(() -> validateQueueContents(10));
+    vm4.invoke(this::stopSender);
 
-    vm4.invoke(() -> validateSenderStoppedState("ln"));
+    vm4.invoke(this::validateSenderStoppedState);
 
     vm5.invoke(() -> createCache(lnPort));
-    vm5.invoke(() -> createSenderInVm5());
+    vm5.invoke(this::createSenderInVm5);
     vm5.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
-    vm5.invoke(() -> startSender("ln"));
+    vm5.invoke(this::startSender);
 
-    vm5.invoke(() -> doPuts(className + "_RR", 10, 110));
+    vm5.invoke(() -> doPuts(className + "_RR"));
 
-    vm5.invoke(() -> validateQueueContents("ln", 110));
-    vm5.invoke(() -> stopSender("ln"));
-    vm5.invoke(() -> validateSenderStoppedState("ln"));
+    vm5.invoke(() -> validateQueueContents(110));
+    vm5.invoke(this::stopSender);
+    vm5.invoke(this::validateSenderStoppedState);
 
-    vm4.invoke(() -> startSender("ln"));
-    vm4.invoke(() -> validateQueueContents("ln", 110));
-    vm4.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::startSender);
+    vm4.invoke(() -> validateQueueContents(110));
+    vm4.invoke(this::stopSender);
 
-    vm5.invoke(() -> startSender("ln"));
+    vm5.invoke(this::startSender);
     vm2.invoke(() -> createCache(nyPort));
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
-    vm2.invoke(() -> createReceiver());
+    vm2.invoke(this::createReceiver);
 
     vm2.invoke(() -> validateRegionSize(className + "_RR", 110));
-    vm5.invoke(() -> stopSender("ln"));
+    vm5.invoke(this::stopSender);
 
-    vm4.invoke(() -> startSender("ln"));
+    vm4.invoke(this::startSender);
     vm2.invoke(() -> validateRegionSize(className + "_RR", 110));
-    vm4.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::stopSender);
   }
 
   /**
@@ -645,8 +648,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
    */
   @Test
   public void testDestroySerialGatewaySenderOnAllNodes() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -660,8 +663,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -672,23 +675,23 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm7.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
 
     // before destroying, stop the sender
-    vm4.invoke(() -> stopSender("ln"));
-    vm5.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::stopSender);
+    vm5.invoke(this::stopSender);
 
-    vm4.invoke(() -> removeSenderFromTheRegion("ln", className + "_RR"));
-    vm5.invoke(() -> removeSenderFromTheRegion("ln", className + "_RR"));
+    vm4.invoke(() -> removeSenderFromTheRegion(className + "_RR"));
+    vm5.invoke(() -> removeSenderFromTheRegion(className + "_RR"));
 
-    vm4.invoke(() -> destroySender("ln"));
-    vm5.invoke(() -> destroySender("ln"));
+    vm4.invoke(this::destroySender);
+    vm5.invoke(this::destroySender);
 
-    vm4.invoke(() -> validateSenderDestroyed("ln", false));
-    vm5.invoke(() -> validateSenderDestroyed("ln", false));
+    vm4.invoke(this::validateSenderDestroyed);
+    vm5.invoke(this::validateSenderDestroyed);
   }
 
   /**
@@ -696,8 +699,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
    */
   @Test
   public void testDestroySerialGatewaySenderOnSingleNode() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -711,8 +714,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -723,20 +726,20 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm7.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
 
     // before destroying, stop the sender
-    vm4.invoke(() -> stopSender("ln"));
+    vm4.invoke(this::stopSender);
 
-    vm4.invoke(() -> removeSenderFromTheRegion("ln", className + "_RR"));
+    vm4.invoke(() -> removeSenderFromTheRegion(className + "_RR"));
 
-    vm4.invoke(() -> destroySender("ln"));
+    vm4.invoke(this::destroySender);
 
-    vm4.invoke(() -> validateSenderDestroyed("ln", false));
-    vm5.invoke(() -> verifySenderRunningState("ln"));
+    vm4.invoke(this::validateSenderDestroyed);
+    vm5.invoke(this::verifySenderRunningState);
   }
 
   /**
@@ -745,8 +748,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
    */
   @Test
   public void testDestroySerialGatewaySenderExceptionScenario() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -760,8 +763,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm6.invoke(() -> createCache(lnPort));
     vm7.invoke(() -> createCache(lnPort));
 
-    vm4.invoke(() -> createSenderInVm4());
-    vm5.invoke(() -> createSenderInVm5());
+    vm4.invoke(this::createSenderInVm4);
+    vm5.invoke(this::createSenderInVm5);
 
     vm2.invoke(() -> createReplicatedRegion(className + "_RR", null));
     vm3.invoke(() -> createReplicatedRegion(className + "_RR", null));
@@ -772,13 +775,13 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm7.invoke(() -> createReplicatedRegion(className + "_RR", "ln"));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     vm4.invoke(() -> doPuts(className + "_RR", 10));
 
     vm4.invoke(() -> {
-      Throwable thrown = catchThrowable(() -> destroySender("ln"));
+      Throwable thrown = catchThrowable(this::destroySender);
       assertThat(thrown).isInstanceOf(GatewaySenderException.class);
     });
 
@@ -787,8 +790,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
 
   @Test
   public void testGatewaySenderNotRegisteredAsCacheServer() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     for (VM vm : toArray(vm2, vm3)) {
       vm.invoke(() -> {
@@ -805,7 +808,7 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm5.invoke(() -> createSender("ln", 2, true, true, numDispatchers, DEFAULT_ORDER_POLICY));
 
     for (VM vm : toArray(vm4, vm5)) {
-      vm.invoke(() -> startSender("ln"));
+      vm.invoke(this::startSender);
     }
 
     for (VM vm : toArray(vm0, vm1)) {
@@ -832,8 +835,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
 
   @Test
   public void registeringInstantiatorsInGatewayShouldNotCauseDeadlock() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     vm2.invoke(() -> createReceiverAndServer(nyPort));
     vm3.invoke(() -> createReceiverAndServer(lnPort));
@@ -841,7 +844,7 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm2.invoke(() -> createSender("ln", 1, false, false, numDispatchers, DEFAULT_ORDER_POLICY));
     vm3.invoke(() -> createSender("ny", 2, false, false, numDispatchers, DEFAULT_ORDER_POLICY));
 
-    vm4.invoke(() -> createClientWithLocator(nyPort, "localhost"));
+    vm4.invoke(() -> createClientWithLocator(nyPort));
 
     // Register instantiator
     vm4.invoke(() -> Instantiator.register(new TestObjectInstantiator()));
@@ -849,8 +852,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
 
   @Test
   public void registeringDataSerializableInGatewayShouldNotCauseDeadlock() {
-    int lnPort = vm0.invoke(() -> createFirstLocatorWithDSId(1));
-    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(2, lnPort));
+    int lnPort = vm0.invoke(this::createFirstLocatorWithDSId);
+    int nyPort = vm1.invoke(() -> createFirstRemoteLocator(lnPort));
 
     vm2.invoke(() -> createReceiverAndServer(nyPort));
     vm3.invoke(() -> createReceiverAndServer(lnPort));
@@ -858,7 +861,7 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     vm2.invoke(() -> createSender("ln", 1, false, false, numDispatchers, DEFAULT_ORDER_POLICY));
     vm3.invoke(() -> createSender("ny", 2, false, false, numDispatchers, DEFAULT_ORDER_POLICY));
 
-    vm4.invoke(() -> createClientWithLocator(nyPort, "localhost"));
+    vm4.invoke(() -> createClientWithLocator(nyPort));
 
     // Register instantiator
     vm4.invoke(() -> DataSerializer.register(TestObjectDataSerializer.class));
@@ -882,9 +885,9 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
       boolean isManualStart,
       int numDispatchers,
       OrderPolicy policy) throws IOException {
-    try (IgnoredException ie = addIgnoredException("Could not connect")) {
+    try (IgnoredException ignored = addIgnoredException("Could not connect")) {
       File persistentDirectory =
-          temporaryFolder.newFolder(id + "_disk_" + currentTimeMillis() + "_" + getCurrentVMNum());
+          temporaryFolder.newFolder(id + "_disk_" + currentTimeMillis() + "_" + getVMId());
       DiskStoreFactory diskStoreFactory = getCache().createDiskStoreFactory();
       File[] dirs = new File[] {persistentDirectory};
 
@@ -925,10 +928,10 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
   }
 
   private void createReplicatedRegion(String regionName, String senderIds) {
-    try (IgnoredException ie1 = addIgnoredException(ForceReattemptException.class);
-        IgnoredException ie2 = addIgnoredException(GatewaySenderException.class);
-        IgnoredException ie3 = addIgnoredException(InterruptedException.class)) {
-      RegionFactory regionFactory = getCache().createRegionFactory(REPLICATE);
+    try (IgnoredException ignored1 = addIgnoredException(ForceReattemptException.class);
+        IgnoredException ignored2 = addIgnoredException(GatewaySenderException.class);
+        IgnoredException ignored3 = addIgnoredException(InterruptedException.class)) {
+      RegionFactory<Number, String> regionFactory = getCache().createRegionFactory(REPLICATE);
 
       if (senderIds != null) {
         StringTokenizer tokenizer = new StringTokenizer(senderIds, ",");
@@ -947,8 +950,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
   }
 
   private void doPuts(String regionName, int count) {
-    try (IgnoredException ie1 = addIgnoredException(GatewaySenderException.class);
-        IgnoredException ie2 = addIgnoredException(InterruptedException.class)) {
+    try (IgnoredException ignored1 = addIgnoredException(GatewaySenderException.class);
+        IgnoredException ignored2 = addIgnoredException(InterruptedException.class)) {
       Region<Number, String> region = getCache().getRegion(SEPARATOR + regionName);
       for (int i = 0; i < count; i++) {
         region.put(i, "Value_" + i);
@@ -956,25 +959,25 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     }
   }
 
-  private void doPuts(String regionName, int from, int count) {
+  private void doPuts(String regionName) {
     Region<Number, String> region = getCache().getRegion(SEPARATOR + regionName);
-    for (int i = from; i < count; i++) {
+    for (int i = 10; i < 110; i++) {
       region.put(i, "Value_" + i);
     }
   }
 
-  private void createClientWithLocator(int locatorPort, String hostName) {
+  private void createClientWithLocator(int locatorPort) {
     Properties props = getDistributedSystemProperties();
 
     props.setProperty(MCAST_PORT, "0");
     props.setProperty(LOCATORS, "");
 
     getCache(props);
-
-    CacheServerTestUtil.disableShufflingOfEndpoints();
+    DistributedRule.getDistributedSystemProperties().setProperty(GeodeGlossary.GEMFIRE_PREFIX + "PoolImpl.DISABLE_RANDOM", "true");
+    DistributedRule.getDistributedSystemProperties().setProperty(GeodeGlossary.GEMFIRE_PREFIX + "bridge.disableShufflingOfEndpoints", "true");
     try {
       PoolManager.createFactory()
-          .addLocator(hostName, locatorPort)
+          .addLocator("localhost", locatorPort)
           .setPingInterval(250)
           .setSubscriptionEnabled(true)
           .setSubscriptionRedundancy(-1)
@@ -985,33 +988,34 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
           .setRetryAttempts(3)
           .create("pool");
     } finally {
-      CacheServerTestUtil.enableShufflingOfEndpoints();
+      DistributedRule.getDistributedSystemProperties().setProperty(GeodeGlossary.GEMFIRE_PREFIX + "PoolImpl.DISABLE_RANDOM", "false");
+      DistributedRule.getDistributedSystemProperties().setProperty(GeodeGlossary.GEMFIRE_PREFIX + "bridge.disableShufflingOfEndpoints", "false");
     }
   }
 
-  private int createFirstLocatorWithDSId(int systemId) {
+  private int createFirstLocatorWithDSId() {
     stopOldLocator();
     int locatorPort = getRandomAvailableTCPPort();
-    startLocator(systemId, locatorPort, locatorPort, -1, true);
+    startLocator(1, locatorPort, locatorPort, -1);
     return locatorPort;
   }
 
-  private int createFirstRemoteLocator(int systemId, int remoteLocatorPort) {
+  private int createFirstRemoteLocator(int remoteLocatorPort) {
     stopOldLocator();
     int locatorPort = getRandomAvailableTCPPort();
-    startLocator(systemId, locatorPort, locatorPort, remoteLocatorPort, true);
+    startLocator(2, locatorPort, locatorPort, remoteLocatorPort);
     return locatorPort;
   }
 
   private void startLocator(int systemId, int locatorPort, int startLocatorPort,
-      int remoteLocatorPort, boolean startServerLocator) {
+                            int remoteLocatorPort) {
     Properties props = getDistributedSystemProperties();
 
     props.setProperty(DISTRIBUTED_SYSTEM_ID, String.valueOf(systemId));
     props.setProperty(MCAST_PORT, "0");
     props.setProperty(LOCATORS, "localhost[" + locatorPort + "]");
     props.setProperty(START_LOCATOR, "localhost[" + startLocatorPort + "],server="
-        + startServerLocator + ",peer=true,hostname-for-clients=localhost");
+        + true + ",peer=true,hostname-for-clients=localhost");
 
     if (remoteLocatorPort != -1) {
       props.setProperty(REMOTE_LOCATORS, "localhost[" + remoteLocatorPort + "]");
@@ -1032,19 +1036,19 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     }
   }
 
-  private InternalGatewaySender findInternalGatewaySender(String senderId) {
-    return (InternalGatewaySender) findGatewaySender(senderId, true);
+  private InternalGatewaySender findInternalGatewaySender() {
+    return (InternalGatewaySender) findGatewaySender(true);
   }
 
-  private GatewaySender findGatewaySender(String senderId) {
-    return findGatewaySender(senderId, true);
+  private GatewaySender findGatewaySender() {
+    return findGatewaySender(true);
   }
 
-  private GatewaySender findGatewaySender(String senderId, boolean assertNotNull) {
+  private GatewaySender findGatewaySender(boolean assertNotNull) {
     Set<GatewaySender> senders = getCache().getGatewaySenders();
     GatewaySender sender = null;
     for (GatewaySender s : senders) {
-      if (s.getId().equals(senderId)) {
+      if (s.getId().equals("ln")) {
         sender = s;
         break;
       }
@@ -1057,34 +1061,34 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     return sender;
   }
 
-  private void startSender(String senderId) {
-    try (IgnoredException ie1 = addIgnoredException("Could not connect");
-        IgnoredException ie2 = addIgnoredException(ForceReattemptException.class);
-        IgnoredException ie3 = addIgnoredException(InterruptedException.class)) {
-      findGatewaySender(senderId).start();
+  private void startSender() {
+    try (IgnoredException ignored1 = addIgnoredException("Could not connect");
+        IgnoredException ignored2 = addIgnoredException(ForceReattemptException.class);
+        IgnoredException ignored3 = addIgnoredException(InterruptedException.class)) {
+      findGatewaySender().start();
     }
   }
 
-  private void pauseSender(String senderId) {
-    try (IgnoredException ie1 = addIgnoredException("Could not connect");
-        IgnoredException ie2 = addIgnoredException(ForceReattemptException.class)) {
-      InternalGatewaySender sender = findInternalGatewaySender(senderId);
+  private void pauseSender() {
+    try (IgnoredException ignored1 = addIgnoredException("Could not connect");
+        IgnoredException ignored2 = addIgnoredException(ForceReattemptException.class)) {
+      InternalGatewaySender sender = findInternalGatewaySender();
       sender.pause();
       sender.getEventProcessor().waitForDispatcherToPause();
     }
   }
 
-  private void resumeSender(String senderId) {
-    try (IgnoredException ie1 = addIgnoredException("Could not connect");
-        IgnoredException ie2 = addIgnoredException(ForceReattemptException.class)) {
-      findGatewaySender(senderId).resume();
+  private void resumeSender() {
+    try (IgnoredException ignored1 = addIgnoredException("Could not connect");
+        IgnoredException ignored2 = addIgnoredException(ForceReattemptException.class)) {
+      findGatewaySender().resume();
     }
   }
 
-  private void stopSender(String senderId) {
-    try (IgnoredException ie1 = addIgnoredException("Could not connect");
-        IgnoredException ie2 = addIgnoredException(ForceReattemptException.class)) {
-      InternalGatewaySender sender = findInternalGatewaySender(senderId);
+  private void stopSender() {
+    try (IgnoredException ignored1 = addIgnoredException("Could not connect");
+        IgnoredException ignored2 = addIgnoredException(ForceReattemptException.class)) {
+      InternalGatewaySender sender = findInternalGatewaySender();
 
       AbstractGatewaySenderEventProcessor eventProcessor = sender.getEventProcessor();
 
@@ -1104,13 +1108,13 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     }
   }
 
-  private void removeSenderFromTheRegion(String senderId, String regionName) {
-    Region region = getCache().getRegion(regionName);
-    region.getAttributesMutator().removeGatewaySenderId(senderId);
+  private void removeSenderFromTheRegion(String regionName) {
+    Region<Number, String> region = getCache().getRegion(regionName);
+    region.getAttributesMutator().removeGatewaySenderId("ln");
   }
 
-  private void destroySender(String senderId) {
-    findGatewaySender(senderId).destroy();
+  private void destroySender() {
+    findGatewaySender().destroy();
   }
 
   private int createReceiver() throws IOException {
@@ -1161,29 +1165,25 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
   }
 
   private void validateRegionSize(String regionName, int regionSize) {
-    try (IgnoredException ie1 = addIgnoredException(CacheClosedException.class);
-        IgnoredException ie2 = addIgnoredException(ForceReattemptException.class)) {
-      Region region = getCache().getRegion(SEPARATOR + regionName);
+    try (IgnoredException ignored1 = addIgnoredException(CacheClosedException.class);
+        IgnoredException ignored2 = addIgnoredException(ForceReattemptException.class)) {
+      Region<Number, String> region = getCache().getRegion(SEPARATOR + regionName);
 
       await()
-          .untilAsserted(() -> {
-            assertThat(region.keySet()).hasSize(regionSize);
-          });
+          .untilAsserted(() -> assertThat(region.keySet()).hasSize(regionSize));
     }
   }
 
-  private void validateQueueContents(String senderId, int regionSize) {
-    try (IgnoredException ie1 = addIgnoredException(GatewaySenderException.class);
-        IgnoredException ie2 = addIgnoredException(InterruptedException.class)) {
-      InternalGatewaySender sender = findInternalGatewaySender(senderId);
+  private void validateQueueContents(int regionSize) {
+    try (IgnoredException ignored1 = addIgnoredException(GatewaySenderException.class);
+        IgnoredException ignored2 = addIgnoredException(InterruptedException.class)) {
+      InternalGatewaySender sender = findInternalGatewaySender();
 
       if (sender.isParallel()) {
         RegionQueue regionQueue = sender.getQueues().toArray(new RegionQueue[1])[0];
         await()
-            .untilAsserted(() -> {
-              assertThat(regionQueue.size())
-                  .isEqualTo(regionSize);
-            });
+            .untilAsserted(() -> assertThat(regionQueue.size())
+                .isEqualTo(regionSize));
 
       } else {
         Set<RegionQueue> queues = sender.getQueues();
@@ -1200,8 +1200,8 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
     }
   }
 
-  private void validateQueueSizeStat(String senderId, int queueSize) {
-    InternalGatewaySender sender = findInternalGatewaySender(senderId);
+  private void validateQueueSizeStat(int queueSize) {
+    InternalGatewaySender sender = findInternalGatewaySender();
 
     await()
         .untilAsserted(() -> assertThat(sender.getEventQueueSize())
@@ -1209,34 +1209,32 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
             .isEqualTo(queueSize));
   }
 
-  private void validateSecondaryQueueSizeStat(String senderId, int queueSize) {
-    InternalGatewaySender sender = findInternalGatewaySender(senderId);
+  private void validateSecondaryQueueSizeStat() {
+    InternalGatewaySender sender = findInternalGatewaySender();
 
     await()
-        .untilAsserted(() -> {
-          assertThat(sender.getStatistics().getUnprocessedEventMapSize())
-              .as("Sender statistics unprocessed event map size")
-              .isEqualTo(queueSize);
-        });
+        .untilAsserted(() -> assertThat(sender.getStatistics().getUnprocessedEventMapSize())
+            .as("Sender statistics unprocessed event map size")
+            .isEqualTo(0));
   }
 
-  private void validateSenderDestroyed(String senderId, boolean isParallel) {
-    GatewaySender sender = findGatewaySender(senderId, false);
+  private void validateSenderDestroyed() {
+    GatewaySender sender = findGatewaySender(false);
 
     assertThat(sender)
         .isNull();
 
     String queueRegionNameSuffix =
-        isParallel ? ParallelGatewaySenderQueue.QSTRING : "_SERIAL_GATEWAY_SENDER_QUEUE";
+        "_SERIAL_GATEWAY_SENDER_QUEUE";
 
     for (InternalRegion region : getCache().getAllRegions()) {
       assertThat(region.getName())
-          .doesNotContain(senderId + queueRegionNameSuffix);
+          .doesNotContain("ln" + queueRegionNameSuffix);
     }
   }
 
-  private void validateSenderOperations(String senderId) {
-    GatewaySender sender = findGatewaySender(senderId);
+  private void validateSenderOperations() {
+    GatewaySender sender = findGatewaySender();
 
     assertThat(sender.isPaused())
         .isFalse();
@@ -1265,15 +1263,15 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
         .isFalse();
   }
 
-  private void validateSenderPausedState(String senderId) {
-    GatewaySender sender = findGatewaySender(senderId);
+  private void validateSenderPausedState() {
+    GatewaySender sender = findGatewaySender();
 
     assertThat(sender.isPaused())
         .isTrue();
   }
 
-  private void validateSenderResumedState(String senderId) {
-    GatewaySender sender = findGatewaySender(senderId);
+  private void validateSenderResumedState() {
+    GatewaySender sender = findGatewaySender();
 
     assertThat(sender.isPaused())
         .isFalse();
@@ -1281,15 +1279,15 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
         .isTrue();
   }
 
-  private void verifySenderRunningState(String senderId) {
-    GatewaySender sender = getCache().getGatewaySender(senderId);
+  private void verifySenderRunningState() {
+    GatewaySender sender = getCache().getGatewaySender("ln");
 
     assertThat(sender.isRunning())
         .isTrue();
   }
 
-  private void validateSenderStoppedState(String senderId) {
-    GatewaySender sender = findGatewaySender(senderId);
+  private void validateSenderStoppedState() {
+    GatewaySender sender = findGatewaySender();
 
     assertThat(sender.isRunning())
         .isFalse();
@@ -1328,7 +1326,7 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
           .append(", ")
           .append("Null Event Processor: ");
     }
-    if (!sender.isPrimary()) {
+    else if (!sender.isPrimary()) {
       message
           .append(lineSeparator())
           .append("Unprocessed Events: ")
@@ -1362,11 +1360,11 @@ public class SerialGatewaySenderOperationsDistributedTest extends CacheTestCase 
   private static class TestObjectInstantiator extends Instantiator {
 
     private TestObjectInstantiator() {
-      this(TestObject.class, (byte) 99);
+      this(TestObject.class);
     }
 
-    private TestObjectInstantiator(Class<TestObject> c, byte id) {
-      super(c, id);
+    private TestObjectInstantiator(Class<TestObject> c) {
+      super(c, (byte) 99);
     }
 
     @Override
