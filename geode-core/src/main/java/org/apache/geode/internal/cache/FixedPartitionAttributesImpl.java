@@ -22,7 +22,7 @@ import java.io.IOException;
 import org.apache.geode.DataSerializable;
 import org.apache.geode.DataSerializer;
 import org.apache.geode.cache.FixedPartitionAttributes;
-import org.apache.geode.util.internal.GeodeGlossary;
+import org.apache.geode.logging.internal.SelectiveLogger;
 
 /**
  * Internal implementation of {@link FixedPartitionAttributes}.
@@ -106,6 +106,9 @@ public class FixedPartitionAttributesImpl extends FixedPartitionAttributes
   }
 
   public void setStartingBucketID(int startingBucketID) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> " This = " + this + " MLH setStartingBucketID ");
+    selectiveLogger.log(" 1  startingBucketID = " + startingBucketID).print();
     this.startingBucketID = startingBucketID;
   }
 
@@ -118,7 +121,23 @@ public class FixedPartitionAttributesImpl extends FixedPartitionAttributes
   }
 
   public boolean hasBucket(int bucketId) {
-    return getStartingBucketID() <= bucketId && bucketId <= getLastBucketID();
+    boolean result = getStartingBucketID() <= bucketId && bucketId <= getLastBucketID();
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger
+        .setPrepend(() -> "Bucket = " + bucketId + " This = " + this + " MLH hasBucket ");
+    selectiveLogger.log(" 1 entered getStartingBucketID() (" + getStartingBucketID()
+        + ") <= bucketId (" + bucketId + ") && bucketId (" + bucketId + ") <= getLastBucketID() ("
+        + getLastBucketID() + ") == result = " + result);
+    switch (bucketId) {
+      case 1:
+      case 2:
+      case 3:
+      case 5:
+      case 6:
+      case 7:
+        selectiveLogger.print();
+    }
+    return result;
   }
 
   public boolean equals(final Object obj) {
@@ -132,10 +151,7 @@ public class FixedPartitionAttributesImpl extends FixedPartitionAttributes
       return false;
     }
     FixedPartitionAttributesImpl spr = (FixedPartitionAttributesImpl) obj;
-    if (spr.getPartitionName().equals(this.getPartitionName())) {
-      return true;
-    }
-    return false;
+    return spr.getPartitionName().equals(this.getPartitionName());
   }
 
   public int hashCode() {
@@ -147,9 +163,7 @@ public class FixedPartitionAttributesImpl extends FixedPartitionAttributes
     s.append("FixedPartitionAttributes@").append("[partitionName=").append(this.partitionName)
         .append(";isPrimary=").append(this.isPrimary).append(";numBuckets=")
         .append(this.numBuckets);
-    if (Boolean.getBoolean(GeodeGlossary.GEMFIRE_PREFIX + "PRDebug")) {
-      s.append(";startingBucketID= ").append(this.startingBucketID);
-    }
+    s.append(";startingBucketID= ").append(this.startingBucketID);
     s.append("]");
     return s.toString();
   }

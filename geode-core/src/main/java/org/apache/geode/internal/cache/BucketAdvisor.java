@@ -16,6 +16,7 @@
 package org.apache.geode.internal.cache;
 
 import static org.apache.geode.internal.Assert.assertTrue;
+import static org.apache.geode.internal.Assert.fail;
 import static org.apache.geode.internal.cache.CacheServerImpl.CACHE_SERVER_BIND_ADDRESS_NOT_AVAILABLE_EXCEPTION_MESSAGE;
 
 import java.io.DataInput;
@@ -76,6 +77,7 @@ import org.apache.geode.internal.util.StopWatch;
 import org.apache.geode.logging.internal.SelectiveLogger;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.util.internal.GeodeGlossary;
+import org.apache.geode.util.internal.UncheckedUtils;
 
 /**
  * Specialized {@link CacheDistributionAdvisor} for {@link BucketRegion BucketRegions}. The
@@ -87,9 +89,10 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   private static final Logger logger = LogService.getLogger();
 
   private static final boolean ENFORCE_SAFE_CLOSE = false;
-  // TODO: Boolean.getBoolean("gemfire.BucketAdvisor.debug.enforceSafeClose");
 
-  /** Reference to the InternalDistributedMember that is primary. */
+  /**
+   * Reference to the InternalDistributedMember that is primary.
+   */
   private final AtomicReference<InternalDistributedMember> primaryMember = new AtomicReference<>();
 
   /**
@@ -105,11 +108,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * The bucket primary will be holding this distributed lock. Protected by synchronized(this).
    */
   private DistributedMemberLock primaryLock;
-
-  // private static final byte MASK_HOSTING = 1; // 0001
-  // private static final byte MASK_VOLUNTEERING = 2; // 0010
-  // private static final byte MASK_OTHER_PRIMARY = 4; // 0100
-  // private static final byte MASK_IS_PRIMARY = 8; // 1000
 
   private static final byte NO_PRIMARY_NOT_HOSTING = 0; // 0000_0000
   private static final byte NO_PRIMARY_HOSTING = 1; // 0000_0001
@@ -166,7 +164,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
   private BucketAdvisor startingBucketAdvisor;
 
-  private PartitionedRegion pRegion;
+  private final PartitionedRegion pRegion;
 
   final ConcurrentMap<String, Boolean> destroyedShadowBuckets = new ConcurrentHashMap<>();
 
@@ -195,9 +193,10 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     PartitionedRegion colocatedRegion = ColocationHelper.getColocatedRegion(pRegion);
     if (colocatedRegion != null) {
       if (colocatedRegion.isFixedPartitionedRegion()) {
-        List<FixedPartitionAttributesImpl> fpas = colocatedRegion.getFixedPartitionAttributesImpl();
-        if (fpas != null) {
-          for (FixedPartitionAttributesImpl fpa : fpas) {
+        List<FixedPartitionAttributesImpl> fixedPartitionAttributes =
+            colocatedRegion.getFixedPartitionAttributesImpl();
+        if (fixedPartitionAttributes != null) {
+          for (FixedPartitionAttributesImpl fpa : fixedPartitionAttributes) {
             if (fpa.hasBucket(bucketId)) {
               parentAdvisor =
                   colocatedRegion.getRegionAdvisor().getBucketAdvisor(fpa.getStartingBucketID());
@@ -216,39 +215,36 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   private void assignStartingBucketAdvisorIfFixedPartitioned(SelectiveLogger selectiveLogger) {
     if (startingBucketAdvisor != null) {
       // already assigned
-      selectiveLogger.log(
-          "MLH assignStartingBucketAdvisorIfFixedPartitioned 1 returning startingBucketAdvisor = "
-              + startingBucketAdvisor);
+      selectiveLogger
+          .log(" assignStartingBucketAdvisorIfFixedPartitioned entered for region = " + pRegion);
       return;
     }
-    selectiveLogger.log("MLH assignStartingBucketAdvisorIfFixedPartitioned 2 ");
 
     if (pRegion.isFixedPartitionedRegion()) {
-      selectiveLogger.log("MLH assignStartingBucketAdvisorIfFixedPartitioned 3 ");
+      List<FixedPartitionAttributesImpl> fixedPartitionAttributes =
+          pRegion.getFixedPartitionAttributesImpl();
+      selectiveLogger
+          .log("assignStartingBucketAdvisorIfFixedPartitioned region = " + pRegion
+              + "  fixedPartitionAttributes =  "
+              + fixedPartitionAttributes);
 
-      List<FixedPartitionAttributesImpl> fpas = pRegion.getFixedPartitionAttributesImpl();
-      selectiveLogger.log("MLH assignStartingBucketAdvisorIfFixedPartitioned 4 fpas =  " + fpas);
-
-      if (fpas != null) {
-        selectiveLogger.log("MLH assignStartingBucketAdvisorIfFixedPartitioned 5 ");
+      if (fixedPartitionAttributes != null) {
 
         int bucketId = getBucket().getId();
-        selectiveLogger
-            .log("MLH assignStartingBucketAdvisorIfFixedPartitioned 6 bucketId " + bucketId);
 
-        for (FixedPartitionAttributesImpl fpa : fpas) {
-          selectiveLogger.log("MLH assignStartingBucketAdvisorIfFixedPartitioned 7 ");
+        for (FixedPartitionAttributesImpl fpa : fixedPartitionAttributes) {
 
           if (fpa.hasBucket(bucketId) && bucketId != fpa.getStartingBucketID()) {
             startingBucketAdvisor = regionAdvisor.getBucketAdvisor(fpa.getStartingBucketID());
-            selectiveLogger
-                .log("MLH assignStartingBucketAdvisorIfFixedPartitioned 8 startingBucketAdvisor = "
-                    + startingBucketAdvisor);
+            selectiveLogger.log("assignStartingBucketAdvisorIfFixedPartitioned region = " + pRegion
+                + " assigning  startingBucketAdvisor = "
+                + startingBucketAdvisor + " for Bucket = " + bucketId);
             break;
           }
         }
       }
     }
+    selectiveLogger.print();
   }
 
   /**
@@ -276,7 +272,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
   /**
    * Try to lock the primary bucket to make sure no operation is on-going at current bucket.
-   *
    */
   void tryLockIfPrimary() {
     if (isPrimary()) {
@@ -328,22 +323,19 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * profile update.
    * <p>
    * Caller must synchronize on this BucketAdvisor.
-   *
    */
   private void deposePrimaryForColocatedChildren() {
     boolean deposedChildPrimaries = true;
     List<PartitionedRegion> colocatedChildPRs = ColocationHelper.getColocatedChildRegions(pRegion);
-    if (colocatedChildPRs != null) {
-      for (PartitionedRegion pr : colocatedChildPRs) {
-        Bucket b = pr.getRegionAdvisor().getBucket(getBucket().getId());
-        if (b != null) {
-          BucketAdvisor ba = b.getBucketAdvisor();
-          deposedChildPrimaries = ba.deposePrimary() && deposedChildPrimaries;
-          if (b instanceof BucketRegionQueue) {
-            BucketRegionQueue brq = (BucketRegionQueue) b;
-            brq.decQueueSize(brq.size());
-            brq.incSecondaryQueueSize(brq.size());
-          }
+    for (PartitionedRegion pr : colocatedChildPRs) {
+      Bucket b = pr.getRegionAdvisor().getBucket(getBucket().getId());
+      if (b != null) {
+        BucketAdvisor ba = b.getBucketAdvisor();
+        deposedChildPrimaries = ba.deposePrimary() && deposedChildPrimaries;
+        if (b instanceof BucketRegionQueue) {
+          BucketRegionQueue brq = (BucketRegionQueue) b;
+          brq.decQueueSize(brq.size());
+          brq.incSecondaryQueueSize(brq.size());
         }
       }
     }
@@ -352,9 +344,10 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   private void deposeOtherPrimaryBucketForFixedPartition() {
     boolean deposedOtherPrimaries = true;
     int bucketId = getBucket().getId();
-    List<FixedPartitionAttributesImpl> fpas = pRegion.getFixedPartitionAttributesImpl();
-    if (fpas != null) {
-      for (FixedPartitionAttributesImpl fpa : fpas) {
+    List<FixedPartitionAttributesImpl> fixedPartitionAttributes =
+        pRegion.getFixedPartitionAttributesImpl();
+    if (fixedPartitionAttributes != null) {
+      for (FixedPartitionAttributesImpl fpa : fixedPartitionAttributes) {
         if (fpa.getStartingBucketID() == bucketId) {
           for (int i = (bucketId + 1); i <= fpa.getLastBucketID(); i++) {
             Bucket b = regionAdvisor.getBucket(i);
@@ -402,10 +395,9 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
   /**
    * Get the random Profile that is not initializing BucketProfile.
-   *
    */
   private Profile selectNotInitializingProfile(Profile[] inProfiles) {
-    int index = 0;
+    int index;
     int offset = 0;
     if (inProfiles.length > 1) {
       // Pick random offset.
@@ -432,8 +424,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   }
 
   /**
-   * Returns the semaphore which controls the number of threads allowed to consume from the
-   * {@link #getVolunteeringQueue volunteering queue}.
+   * Returns the semaphore which controls the number of threads allowed to consume from the {@link
+   * #getVolunteeringQueue volunteering queue}.
    *
    * @return the semaphore which controls the number of volunteering threads
    */
@@ -527,14 +519,12 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   }
 
 
-
   /**
    * Called by the RegionAdvisor.profileRemoved, this method tests to see if the missing member is
    * the primary elector for this bucket.
-   *
+   * <p>
    * We can't call this method from BucketAdvisor.profileRemoved, because the primaryElector may not
    * actually host the bucket.
-   *
    */
   public void checkForLostPrimaryElector(Profile profile) {
     // If the member that went away was in the middle of creating
@@ -560,7 +550,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * @param profile the profile to add (must be a BucketProfile)
    * @param forceProfile true will force profile to be added even if member is not in distributed
    *        view
-   *
    * @see #adviseProfileUpdate()
    */
   @Override
@@ -575,7 +564,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
         logger.trace(LogMarker.DISTRIBUTION_ADVISOR_VERBOSE, "BucketAdvisor#putProfile early out");
       }
       return false; // Do not allow introduction of proxy profiles, they don't provide anything
-                    // useful
+      // useful
       // isHosting = false, isInitializing = false
     }
     if (logger.isTraceEnabled(LogMarker.DISTRIBUTION_ADVISOR_VERBOSE)) {
@@ -615,12 +604,39 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     throw new IllegalArgumentException();
   }
 
+  @Override
+  public String toString() {
+    InternalDistributedMember temp = primaryMember.get();
+
+    return "BucketAdvisor{" +
+        " BucketId =" + getBucket().getId() +
+        " primaryMemberId =" + (temp == null ? "" : temp.getId()) +
+        '}';
+  }
+
+  // @Override
+  // public String toString() {
+  // final StringBuilder sb = new StringBuilder("[BucketAdvisor
+  // ").append(getAdvisee().getFullPath())
+  // .append(':').append(getAdvisee().getSerialNumber()).append(": ");
+  // sb.append("state=").append(primaryStateToString());
+  // sb.append(" Bucket : ").append(this.getBucket());
+  // sb.append(" Ever had primary").append(this.everHadPrimary);
+  // sb.append(" Primary State : ").append(this.primaryState);
+  // sb.append(" Parent Advisor : ").append(this.parentAdvisor);
+  // sb.append(" Local Profile : ").append(this.localProfile);
+  // sb.append(" Profiles : ").append(Arrays.toString(this.profiles));
+  // sb.append(" PartitionedRegion : ").append(this.pRegion);
+  // sb.append("]");
+  // return sb.toString();
+  // }
+
   @SuppressWarnings("NullableProblems")
   private static class SetFromMap<E> extends AbstractSet<E> implements Serializable {
     private static final long serialVersionUID = 2454657854757543876L;
 
     // must named as it, to pass serialization compatibility test.
-    private Map<E, Boolean> m;
+    private final Map<E, Boolean> m;
 
     private transient Set<E> backingSet;
 
@@ -632,7 +648,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
     @Override
     public boolean equals(Object object) {
-      return backingSet.equals(object);
+      return backingSet.getClass().equals(object.getClass()) && backingSet.equals(object);
     }
 
     @Override
@@ -723,7 +739,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
   /**
    * Only for local profile.
-   *
    */
   public synchronized void updateServerBucketProfile(BucketProfile p) {
     localProfile = p;
@@ -805,8 +820,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * regions that exist. If there are no real bucket regions within the distribution config's
    * member-timeout setting * 3 (time required to eject a member) + 15000, then this returns null.
    *
-   * kbanks: reworked this method to avoid JIT issue #40639
-   *
    * @return the member who is primary for this bucket
    */
   public InternalDistributedMember getPrimary() {
@@ -821,8 +834,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * This method was split out from getPrimary() due to bug #40639 and is only intended to be called
    * from within that method.
    *
-   * @see #getPrimary()
    * @return the existing primary (if it is still in the view) otherwise null
+   * @see #getPrimary()
    */
   private InternalDistributedMember getExistingPrimary() {
     return basicGetPrimaryMember();
@@ -832,10 +845,11 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * This method was split out from getPrimary() due to bug #40639 and is only intended to be called
    * from within that method.
    *
-   * @see #getPrimary()
    * @return the new primary
+   * @see #getPrimary()
    */
   private InternalDistributedMember waitForNewPrimary() {
+
     DistributionManager dm = regionAdvisor.getDistributionManager();
     DistributionConfig config = dm.getConfig();
     // failure detection period
@@ -867,6 +881,12 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * @param member the member who is not primary
    */
   private void removePrimary(InternalDistributedMember member) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(
+        () -> "Bucket = " + getBucket().getName() + " MLH removePrimary ");
+    selectiveLogger.log(" 1 removing primary for Bucket =  " + getBucket().getId() + " PR : " +
+        regionAdvisor.getPartitionedRegion().getFullPath());
+
     boolean needToVolunteerForPrimary = false;
     if (!isClosed()) { // hole: requestPrimaryState not hosting
       initializationGate();
@@ -877,9 +897,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
         boolean wasPrimary = isPrimary() && getDistributionManager().getId().equals(member);
         final InternalDistributedMember currentPrimary = primaryMember.get();
         if (currentPrimary != null && currentPrimary.equals(member)) {
-          if (logger.isDebugEnabled()) {
-            logger.debug("[BucketAdvisor.notPrimary] {} for {}", member, this);
-          }
+          selectiveLogger.log(" 2 [BucketAdvisor.notPrimary] " + member);
           primaryMember.set(null);
         } else {
           return;
@@ -895,9 +913,14 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           if (pRegion.isFixedPartitionedRegion()) {
             InternalDistributedMember primaryMember =
                 regionAdvisor.adviseFixedPrimaryPartitionDataStore(getBucket().getId());
+
             needToVolunteerForPrimary = primaryMember == null || primaryMember.equals(member);
+            selectiveLogger.log(" 3 needToVolunteerForPrimary " + needToVolunteerForPrimary);
+
           } else {
             needToVolunteerForPrimary = true;
+            selectiveLogger.log(" 4 needToVolunteerForPrimary " + needToVolunteerForPrimary);
+
           }
         } else {
           requestPrimaryState(NO_PRIMARY_NOT_HOSTING);
@@ -908,6 +931,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
         // try to fix yet another cause of bug 36881
         findAndSetPrimaryMember();
+        selectiveLogger.log(" 5 findAndSetPrimaryMember called ");
+
       }
     } finally {
       if (lostPrimary) {
@@ -927,8 +952,11 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     }
 
     if (needToVolunteerForPrimary) {
+      selectiveLogger.log(" 6 calling  volunteerForPrimary ");
+
       volunteerForPrimary();
     }
+    selectiveLogger.log("7 finished").print();
   }
 
   /**
@@ -968,6 +996,10 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    */
   protected boolean isClosed() {
     return primaryState == CLOSED;
+  }
+
+  public byte getPrimaryState() {
+    return primaryState;
   }
 
   /**
@@ -1017,28 +1049,36 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * an executor (waiting pool) and returns early.
    */
   public void volunteerForPrimary() {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(
+        () -> "Bucket = " + getBucket().getName() + " MLH BucketAdvisor.volunteerForPrimary ");
+    selectiveLogger.log(" 1 entered");
     InternalDistributedMember elector = primaryElector;
     if (elector != null && regionAdvisor.hasPartitionedRegion(elector)) {
       // another server will determine the primary node
+      selectiveLogger.log(" 2 exiting early").print();
       return;
     }
 
     primaryElector = null;
-
+    selectiveLogger.log(" 3");
     initializationGate();
 
     synchronized (this) {
       if (isVolunteering() || isClosed() || !isHosting()) {
         // only one thread should be attempting to volunteer at one time
+        selectiveLogger.log(" 4 returing early").print();
         return;
       }
-
+      selectiveLogger.log(" 5");
       if (volunteeringDelegate == null) {
         setVolunteeringDelegate(new VolunteeringDelegate());
       }
+      selectiveLogger.log(" 6");
       volunteeringDelegate.volunteerForPrimary();
 
     }
+    selectiveLogger.log(" 7 finished").print();
   }
 
   protected void setVolunteeringDelegate(VolunteeringDelegate delegate) {
@@ -1167,10 +1207,12 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * @return true if successfully changed state to IS_PRIMARY
    */
   private boolean acquiredPrimaryLock() {
-    if (logger.isDebugEnabled()) {
-      logger.debug("Acquired primary lock for BucketID {} PR : {}", getBucket().getId(),
-          regionAdvisor.getPartitionedRegion().getFullPath());
-    }
+
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(
+        () -> "Bucket = " + getBucket().getName() + " MLH acquiredPrimaryLock ");
+    selectiveLogger.log(" 1 Acquired primary lock for Bucket =  " + getBucket().getId() + " PR : " +
+        regionAdvisor.getPartitionedRegion().getFullPath());
     boolean changedStateToIsPrimary = false;
     // Hold the primary move lock until we send a
     // profile update. This will prevent writes
@@ -1186,10 +1228,11 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
             ((BucketRegion) br).beforeAcquiringPrimaryState();
           }
           if (requestPrimaryState(IS_PRIMARY_HOSTING)) {
-            if (logger.isDebugEnabled()) {
-              logger.debug("Acquired primary lock for setting primary now BucketID {} PR : {}",
-                  getBucket().getId(), regionAdvisor.getPartitionedRegion().getFullPath());
-            }
+            selectiveLogger.log(
+                " 2 Acquired primary lock for setting primary now Bucket =  " + getBucket().getId()
+                    + " PR : " +
+                    regionAdvisor.getPartitionedRegion().getFullPath());
+
             setPrimaryMember(getDistributionManager().getId());
             changedStateToIsPrimary = true;
             if (hasPrimary() && isPrimary()) {
@@ -1208,18 +1251,25 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
         if (changedStateToIsPrimary) {
           // send profile update AFTER releasing sync
           sendProfileUpdate();
+          selectiveLogger.log(" 3 send profile update ");
 
           Bucket br = regionAdvisor.getBucket(getBucket().getId());
           if (br instanceof BucketRegion) {
             ((BucketRegion) br).processPendingSecondaryExpires();
+            selectiveLogger.log(" 4 processPendingSecondaryExpires ran ");
+
           }
           if (br instanceof BucketRegionQueue) { // Shouldn't it be AbstractBucketRegionQueue
             BucketRegionQueue brq = (BucketRegionQueue) br;
             brq.incQueueSize(brq.size());
             brq.decSecondaryQueueSize(brq.size());
+            selectiveLogger.log(" 5 updated queue size");
+
           }
           if (br instanceof BucketRegion) {
             ((BucketRegion) br).afterAcquiringPrimaryState();
+            selectiveLogger.log(" 6 afterAcquiringPrimaryState");
+
           }
         } else {
           // release primary lock AFTER releasing sync
@@ -1228,6 +1278,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       } finally {
         primaryMoveWriteLock.unlock();
       }
+      selectiveLogger.log(" 7 finished").print();
     }
   }
 
@@ -1272,7 +1323,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           if (!createDLS || getProxyBucketRegion().getCache().isClosed()) {
             return null; // cache closure has destroyed the DLS
           }
-          try { // TODO: call GemFireCache#getPartitionedRegionLockService
+          try {
             dls = DLockService.create(PartitionedRegionHelper.PARTITION_LOCK_SERVICE_NAME,
                 getAdvisee().getSystem(), true /* distributed */, true /* destroyOnDisconnect */,
                 true /* automateFreeResources */);
@@ -1284,11 +1335,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
               // another thread destroyed DLS after this thread called create
               return null; // ok, caller will loop if necessary
             }
-          }
-          // TODO: we need a good NotConnectedException to replace
-          // IllegalStateException and ShutdownException
-          // perhaps: DistributedSystemUnavailableException
-          catch (IllegalStateException | DistributedSystemDisconnectedException e) {
+          } catch (IllegalStateException | DistributedSystemDisconnectedException e) {
             // create still throws IllegalStateException if isDisconnecting is true
             return null;
           } // this would certainly prevent us from creating a DLS... messy
@@ -1302,62 +1349,101 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     }
   }
 
-  private void acquirePrimaryRecursivelyForColocated() {
+  private void acquirePrimaryRecursivelyForColocated(
+      SelectiveLogger selectiveLogger) {
     final List<PartitionedRegion> colocatedWithList =
         ColocationHelper.getColocatedChildRegions(regionAdvisor.getPartitionedRegion());
-    if (colocatedWithList != null) {
-      for (PartitionedRegion childPR : colocatedWithList) {
-        Bucket b = childPR.getRegionAdvisor().getBucket(getBucket().getId());
-        BucketAdvisor childBA = b.getBucketAdvisor();
-        Assert.assertHoldsLock(childBA, false);
-        boolean acquireForChild = false;
+    selectiveLogger
+        .log("acquirePrimaryRecursivelyForColocated 1 colocatedWithList" + colocatedWithList);
+    for (PartitionedRegion childPR : colocatedWithList) {
+      Bucket b = childPR.getRegionAdvisor().getBucket(getBucket().getId());
+      selectiveLogger.log("acquirePrimaryRecursivelyForColocated 2 Bucket " + b);
 
-        if (logger.isDebugEnabled()) {
-          logger.debug(
-              "BucketAdvisor.acquirePrimaryRecursivelyForColocated: about to take lock for bucket: {} of PR: {} with isHosting={}",
-              getBucket().getId(), childPR.getFullPath(), childBA.isHosting());
-        }
-        childBA.primaryMoveWriteLock.lock();
-        try {
-          if (childBA.isHosting()) {
-            if (isPrimary()) {
-              if (!childBA.isPrimary()) {
-                childBA.setVolunteering();
-                boolean acquired = childBA.acquiredPrimaryLock();
-                acquireForChild = true;
-                if (acquired && pRegion.isFixedPartitionedRegion()) {
-                  childBA.acquirePrimaryForRestOfTheBucket();
-                }
-              } else {
-                acquireForChild = true;
+      BucketAdvisor childBA = b.getBucketAdvisor();
+      selectiveLogger
+          .log("acquirePrimaryRecursivelyForColocated 3 BucketAdvisor  childBA" + childBA);
+
+      Assert.assertHoldsLock(childBA, false);
+      boolean acquireForChild = false;
+
+      if (logger.isDebugEnabled()) {
+        logger.debug(
+            "BucketAdvisor.acquirePrimaryRecursivelyForColocated: about to take lock for bucket: {} of PR: {} with isHosting={}",
+            getBucket().getId(), childPR.getFullPath(), childBA.isHosting());
+      }
+      selectiveLogger.log("acquirePrimaryRecursivelyForColocated 4 ");
+
+      childBA.primaryMoveWriteLock.lock();
+      try {
+        selectiveLogger.log("acquirePrimaryRecursivelyForColocated 5 ");
+
+        if (childBA.isHosting()) {
+          if (isPrimary()) {
+            if (!childBA.isPrimary()) {
+              selectiveLogger.log("acquirePrimaryRecursivelyForColocated 6 ");
+
+              childBA.setVolunteering();
+              selectiveLogger.log("acquirePrimaryRecursivelyForColocated 7 setVolunteering done ");
+
+              boolean acquired = childBA.acquiredPrimaryLock();
+              acquireForChild = true;
+              if (acquired && pRegion.isFixedPartitionedRegion()) {
+                childBA.acquirePrimaryForRestOfTheBucket(selectiveLogger);
+                selectiveLogger.log(
+                    "acquirePrimaryRecursivelyForColocated 8 childBA.acquirePrimaryForRestOfTheBucket done ");
+
               }
+            } else {
+              acquireForChild = true;
+              selectiveLogger.log("acquirePrimaryRecursivelyForColocated 9 ");
+
             }
-          } // if isHosting
-          if (acquireForChild) {
-            childBA.acquirePrimaryRecursivelyForColocated();
           }
-        } finally {
-          childBA.primaryMoveWriteLock.unlock();
+        } // if isHosting
+        if (acquireForChild) {
+          childBA.acquirePrimaryRecursivelyForColocated(selectiveLogger);
+          selectiveLogger.log("acquirePrimaryRecursivelyForColocated 10 ");
+
         }
+      } finally {
+        childBA.primaryMoveWriteLock.unlock();
+        selectiveLogger.log("acquirePrimaryRecursivelyForColocated 11");
       }
     }
   }
 
-  private void acquirePrimaryForRestOfTheBucket() {
-    List<FixedPartitionAttributesImpl> fpas = pRegion.getFixedPartitionAttributesImpl();
-    if (fpas != null) {
+  private void acquirePrimaryForRestOfTheBucket(SelectiveLogger selectiveLogger) {
+    selectiveLogger.log("acquirePrimaryForRestOfTheBucket 1");
+
+    // Get the fixed partition attributes
+    List<FixedPartitionAttributesImpl> fixedPartitionAttributes =
+        pRegion.getFixedPartitionAttributesImpl();
+    selectiveLogger.log("acquirePrimaryForRestOfTheBucket 2");
+    if (fixedPartitionAttributes != null) {
       int bucketId = getBucket().getId();
-      for (FixedPartitionAttributesImpl fpa : fpas) {
+      selectiveLogger.log("acquirePrimaryForRestOfTheBucket 3 bucketId = " + bucketId);
+
+      // for each set of partition attributes
+      for (FixedPartitionAttributesImpl fpa : fixedPartitionAttributes) {
+
+        // if the attributes bucket ID matches this bucket Id.
         if (fpa.getStartingBucketID() == bucketId) {
           for (int i = bucketId + 1; i <= fpa.getLastBucketID();) {
             Bucket b = regionAdvisor.getBucket(i++);
             if (b != null) {
+
               BucketAdvisor ba = b.getBucketAdvisor();
+              selectiveLogger
+                  .log("acquirePrimaryForRestOfTheBucket 5 trying to acquire primary for Bucket = "
+                      + (i - 1) + " using BucketAdvisor " + ba);
               ba.primaryMoveWriteLock.lock();
               try {
                 if (ba.isHosting()) {
                   if (!ba.isPrimary()) {
                     ba.setVolunteering();
+                    selectiveLogger
+                        .log("acquirePrimaryForRestOfTheBucket 6 setVolunteering done ba = "
+                            + ba.getBucket().getId());
                     ba.acquiredPrimaryLock();
                   }
                 }
@@ -1373,10 +1459,17 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
   /**
    * Sets volunteering to true. Returns true if the state of volunteering was changed. Returns false
-   * if voluntering was already equal to true. Caller should do nothing if false is returned.
+   * if volunteering was already equal to true. Caller should do nothing if false is returned.
    */
   private boolean setVolunteering() {
     synchronized (this) {
+      if (this.getBucket() != null) {
+        int bucketId = this.getBucket().getId();
+        SelectiveLogger selectiveLogger = new SelectiveLogger();
+        selectiveLogger.setPrepend(() -> "MLH setVolunteering ");
+        selectiveLogger.log(" Bucket = " + bucketId);
+        selectiveLogger.print();
+      }
       return requestPrimaryState(VOLUNTEERING_HOSTING);
     }
   }
@@ -1387,6 +1480,13 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    */
   private boolean setBecoming() {
     synchronized (this) {
+      if (this.getBucket() != null) {
+        int bucketId = this.getBucket().getId();
+        SelectiveLogger selectiveLogger = new SelectiveLogger();
+        selectiveLogger.setPrepend(() -> "MLH setBecoming ");
+        selectiveLogger.log(" Bucket = " + bucketId);
+        selectiveLogger.print();
+      }
       return requestPrimaryState(BECOMING_HOSTING);
     }
   }
@@ -1403,6 +1503,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       StopWatch timer = new StopWatch(true);
       long warnTime = getDistributionManager().getConfig().getAckWaitThreshold() * 1000L;
       boolean loggedWarning = false;
+
       try {
         for (;;) {
           // bail out if the system starts closing
@@ -1425,10 +1526,12 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           if (timeLeft <= 0) {
             break;
           }
+
           if (getBucketRedundancy() == -1 || isClosed()) {
             break; // early out... all bucket regions are gone or we closed
           }
           InternalDistributedMember primary = basicGetPrimaryMember();
+
           if (primary != null) {
             return primary;
           }
@@ -1441,22 +1544,23 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           if (!loggedWarning) {
             long timeUntilWarning = warnTime - elapsed;
             if (timeUntilWarning <= 0) {
-              logger
-                  .warn(
-                      "{} secs have elapsed waiting for a primary for bucket {}. Current bucket owners {}",
-                      new Object[] {warnTime / 1000L, this, adviseInitialized()});
+              logger.warn(
+                  "{} secs have elapsed waiting for a primary for bucket {}. Current bucket owners {}",
+                  new Object[] {warnTime / 1000L, this, adviseInitialized()});
               // log a warning;
               loggedWarning = true;
             } else {
-              timeLeft = timeLeft > timeUntilWarning ? timeUntilWarning : timeLeft;
+              timeLeft = Math.min(timeLeft, timeUntilWarning);
             }
           }
           wait(timeLeft); // spurious wakeup ok
         }
       } catch (InterruptedException e) {
         // abort and return null
+
         Thread.currentThread().interrupt();
       } finally {
+
         if (loggedWarning) {
           logger.info(
               "Wait for primary completed");
@@ -1467,7 +1571,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   }
 
   /**
-   * How long to wait, in millisecs, for redundant buckets to exist
+   * How long to wait, in milliseconds, for redundant buckets to exist
    */
   private static final long BUCKET_REDUNDANCY_WAIT = 15000L; // 15 seconds
 
@@ -1512,6 +1616,9 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   }
 
   synchronized void setPrimaryElector(InternalDistributedMember newPrimaryElector) {
+    SelectiveLogger logger = new SelectiveLogger();
+    logger.setPrepend(() -> " MLH setPrimaryElector bucketAdvisor = " + this + "primary elector"
+        + primaryElector);
     // Only set the new primary elector if we have not yet seen
     // a primary for this bucket.
     if (primaryElector != null) {
@@ -1522,6 +1629,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
         primaryElector = newPrimaryElector;
       }
     }
+    logger.log(" primary elector =  " + primaryElector).print();
+
   }
 
 
@@ -1529,6 +1638,9 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     // For child buckets, we want the parent bucket to take care'
     // of finishing an incomplete bucket creation, so only set the elector for
     // the leader region.
+    SelectiveLogger logger = new SelectiveLogger();
+    logger.setPrepend(() -> "bucketAdvisor = " + this + "primary elector" + primaryElector
+        + " MLH initializePrimaryElector");
     if (parentAdvisor == null) {
       if (newPrimaryElector != null && !regionAdvisor.hasPartitionedRegion(newPrimaryElector)) {
         // no longer a participant - don't use it
@@ -1537,6 +1649,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
         primaryElector = newPrimaryElector;
       }
     }
+    logger.log(" primary elector =  " + primaryElector).print();
   }
 
   /**
@@ -1545,7 +1658,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * @param value true to begin hosting; false to end hosting
    */
   protected void setHosting(boolean value) {
-    // boolean needToNotPrimarySelf = false;
     boolean needToVolunteerForPrimary = false;
     boolean wasPrimary;
     synchronized (this) {
@@ -1560,9 +1672,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           requestPrimaryState(NO_PRIMARY_HOSTING);
           needToVolunteerForPrimary = true;
         }
-      }
-
-      else { // setting to NOT_HOSTING...
+      } else { // setting to NOT_HOSTING...
         if (hasPrimary()) { // has primary...
           if (isPrimary()) {
             requestPrimaryState(NO_PRIMARY_NOT_HOSTING);
@@ -1611,6 +1721,10 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * distributed deadlocks.
    */
   private void sendProfileUpdate() {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger
+        .setPrepend(() -> "Bucket = " + getBucket().getName() + " MLH sendProfileUpdate");
+    selectiveLogger.log(" 1 entered");
     if (getDistributionManager().getSystem().isLoner()) {
       // no one to send the profile update... return to prevent bug 39760
       return;
@@ -1632,7 +1746,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     }
     hostsAndProxyMembers.addAll(adviseGeneric()); // Add all members hosting the bucket
     hostsAndProxyMembers.addAll(adviseProfileUpdate()); // Add all proxy instances that could use
-                                                        // the bucket
+    // the bucket
     ReplyProcessor21 reply = BucketProfileUpdateMessage.send(hostsAndProxyMembers,
         getDistributionManager(), partitionedRegionId, bucketId, bp, true);
     if (reply != null) {
@@ -1654,7 +1768,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     if (!pRegion.isShadowPR()) {
       Set<BucketServerLocation66> serverLocations = getBucketServerLocations(version);
       if (!serverLocations.isEmpty()) {
-        return new ServerBucketProfile(memberId, version, getBucket(), (HashSet) serverLocations);
+        return new ServerBucketProfile(memberId, version, getBucket(),
+            UncheckedUtils.uncheckedCast(serverLocations));
       }
     }
     return new BucketProfile(memberId, version, getBucket());
@@ -1693,6 +1808,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * @param id the member to use as primary for this bucket
    */
   private void setPrimaryMember(InternalDistributedMember id) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> "BucketAdvisor = " + this + " MLH setPrimaryMember = " + id);
     if (!getDistributionManager().getId().equals(id)) {
       // volunteerForPrimary handles primary state change if its our id
       if (isHosting()) {
@@ -1707,6 +1824,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     if (id != null && id.equals(primaryElector)) {
       primaryElector = null;
     }
+    selectiveLogger.log("primaryMember is now " + id).print();
     notifyAll(); // wake up any threads in waitForPrimaryMember
   }
 
@@ -1760,8 +1878,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   }
 
   /**
-   * Searches through profiles to find first profile that is flagged as primary and sets
-   * {@link #primaryMember} to it. Caller must synchronize on this BucketAdvisor.
+   * Searches through profiles to find first profile that is flagged as primary and sets {@link
+   * #primaryMember} to it. Caller must synchronize on this BucketAdvisor.
    *
    * @return true if a primary member was found and used
    * @see #findAndSetPrimaryMember()
@@ -1805,7 +1923,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
   /**
    * Get the number of members that are hosting the bucket, and have finished initialization.
-   *
+   * <p>
    * This method is currently only used to check the bucket redundancy just before creating the
    * bucket. If it is used more frequently, it might be better to cache this count.
    */
@@ -1834,39 +1952,33 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   private void releasePrimaryLock() {
     // We don't have a lock if we have a parent advisor
     SelectiveLogger selectiveLogger = new SelectiveLogger();
-    selectiveLogger.log("MLH releasePrimaryLock 1");
+    selectiveLogger
+        .setPrepend(() -> "Bucket = " + getBucket().getId() + " MLH releasePrimaryLock" + ":");
+    selectiveLogger.log(" entered");
     if (parentAdvisor != null) {
-      selectiveLogger
-          .log("MLH releasePrimaryLock 2 returning parentAdvisor != null" + parentAdvisor);
+
       return;
     }
     assignStartingBucketAdvisorIfFixedPartitioned(selectiveLogger);
-    selectiveLogger.log("MLH releasePrimaryLock 3");
 
     if (startingBucketAdvisor != null) {
-      selectiveLogger.log("MLH releasePrimaryLock 4");
-
       return;
     }
     try {
       DistributedMemberLock thePrimaryLock = getPrimaryLock(false);
-      selectiveLogger.log("MLH releasePrimaryLock 5");
 
       if (thePrimaryLock != null) {
         thePrimaryLock.unlock();
-        selectiveLogger.log("MLH releasePrimaryLock 6");
       }
     } catch (LockNotHeldException e) {
-      selectiveLogger.log("MLH releasePrimaryLock 7 e = " + e.getMessage());
       selectiveLogger.print();
       assertTrue(!isHosting(), "Got LockNotHeldException for Bucket = " + this);
     } catch (LockServiceDestroyedException e) {
-      selectiveLogger.log("MLH releasePrimaryLock 8 e = " + e.getMessage());
       selectiveLogger.print();
       assertTrue(isClosed(),
           "BucketAdvisor was not closed before destroying PR lock service");
     }
-    selectiveLogger.flush();
+    selectiveLogger.log(" finished").print();
   }
 
   private String primaryStateToString() {
@@ -1919,23 +2031,15 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
             // race condition ok, return false
             return false;
           case NO_PRIMARY_HOSTING:
-            primaryState = requestedState;
-            break;
           case OTHER_PRIMARY_NOT_HOSTING:
-            primaryState = requestedState;
-            break;
           case OTHER_PRIMARY_HOSTING:
-            primaryState = requestedState;
-            break;
-          case BECOMING_HOSTING:
-            // race condition during close is ok, return false
-            return false;
-          case VOLUNTEERING_HOSTING:
-            // race condition during close is ok, return false
-            return false;
           case CLOSED:
             primaryState = requestedState;
             break;
+          case BECOMING_HOSTING:
+          case VOLUNTEERING_HOSTING:
+            // race condition during close is ok, return false
+            return false;
           default:
             throw new IllegalStateException(String.format("Cannot change from %s to %s",
                 primaryStateToString(), primaryStateToString(requestedState)));
@@ -1944,6 +2048,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       case NO_PRIMARY_HOSTING:
         switch (requestedState) {
           case NO_PRIMARY_NOT_HOSTING:
+          case OTHER_PRIMARY_HOSTING:
+          case CLOSED:
             primaryState = requestedState;
             break;
           // case OTHER_PRIMARY_NOT_HOSTING: -- enable for bucket migration
@@ -1953,22 +2059,11 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
             // race condition ok, return false
             return false;
           case VOLUNTEERING_HOSTING:
-            primaryState = requestedState; {
-            PartitionedRegionStats stats = getPartitionedRegionStats();
-            stats.putStartTime(this, stats.startVolunteering());
-          }
-            break;
           case BECOMING_HOSTING:
             primaryState = requestedState; {
             PartitionedRegionStats stats = getPartitionedRegionStats();
             stats.putStartTime(this, stats.startVolunteering());
           }
-            break;
-          case OTHER_PRIMARY_HOSTING:
-            primaryState = requestedState;
-            break;
-          case CLOSED:
-            primaryState = requestedState;
             break;
           default:
             throw new IllegalStateException(String.format("Cannot change from %s to %s",
@@ -1979,23 +2074,17 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       case OTHER_PRIMARY_NOT_HOSTING:
         switch (requestedState) {
           case NO_PRIMARY_NOT_HOSTING:
+          case OTHER_PRIMARY_HOSTING:
+          case CLOSED:
             primaryState = requestedState;
             break;
           case OTHER_PRIMARY_NOT_HOSTING:
             // race condition ok, return false
             return false;
-          case OTHER_PRIMARY_HOSTING:
-            primaryState = requestedState;
-            break;
           case BECOMING_HOSTING:
-            // race condition during close is ok, return false
-            return false;
           case VOLUNTEERING_HOSTING:
             // race condition during close is ok, return false
             return false;
-          case CLOSED:
-            primaryState = requestedState;
-            break;
           default:
             throw new IllegalStateException(String.format("Cannot change from %s to %s",
                 primaryStateToString(),
@@ -2008,18 +2097,18 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           // this.primaryState = requestedState;
           // break;
           case OTHER_PRIMARY_NOT_HOSTING:
+          case NO_PRIMARY_HOSTING:
+          case CLOSED:
+          case IS_PRIMARY_HOSTING:
+            // race condition ok, probably race in HA where other becomes
+            // primary and immediately leaves while we have try-lock message
+            // en route to grantor
             // May occur when setHosting(false) is called
             primaryState = requestedState;
             break;
           case OTHER_PRIMARY_HOSTING:
             // race condition ok, return false
             return false;
-          case NO_PRIMARY_HOSTING:
-            primaryState = requestedState;
-            break;
-          case CLOSED:
-            primaryState = requestedState;
-            break;
           case VOLUNTEERING_HOSTING:
             // race condition ok, return false to abort volunteering
             return false;
@@ -2028,12 +2117,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
             PartitionedRegionStats stats = getPartitionedRegionStats();
             stats.putStartTime(this, stats.startVolunteering());
           }
-            break;
-          case IS_PRIMARY_HOSTING:
-            // race condition ok, probably race in HA where other becomes
-            // primary and immediately leaves while we have try-lock message
-            // enroute to grantor
-            primaryState = requestedState;
             break;
           default:
             throw new IllegalStateException(String.format("Cannot change from %s to %s",
@@ -2044,15 +2127,10 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       case VOLUNTEERING_HOSTING:
         switch (requestedState) {
           case NO_PRIMARY_NOT_HOSTING:
-            // May occur when setHosting(false) is called
-            primaryState = requestedState; {
-            PartitionedRegionStats stats = getPartitionedRegionStats();
-            stats.endVolunteeringClosed(stats.removeStartTime(this));
-          }
-            break;
           case OTHER_PRIMARY_NOT_HOSTING:
-            // May occur when setHosting(false) is called
+          case CLOSED:
             // Profile update for other primary may have slipped in
+            // May occur when setHosting(false) is called
             primaryState = requestedState; {
             PartitionedRegionStats stats = getPartitionedRegionStats();
             stats.endVolunteeringClosed(stats.removeStartTime(this));
@@ -2075,17 +2153,9 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           }
             break;
           case VOLUNTEERING_HOSTING:
-            // race condition ok, return false to abort volunteering
-            return false;
           case BECOMING_HOSTING:
             // race condition ok, return false to abort volunteering
             return false;
-          case CLOSED:
-            primaryState = requestedState; {
-            PartitionedRegionStats stats = getPartitionedRegionStats();
-            stats.endVolunteeringClosed(stats.removeStartTime(this));
-          }
-            break;
           default:
             throw new IllegalStateException(String.format("Cannot change from %s to %s",
                 primaryStateToString(),
@@ -2095,15 +2165,10 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       case BECOMING_HOSTING:
         switch (requestedState) {
           case NO_PRIMARY_NOT_HOSTING:
-            // May occur when setHosting(false) is called
-            primaryState = requestedState; {
-            PartitionedRegionStats stats = getPartitionedRegionStats();
-            stats.endVolunteeringClosed(stats.removeStartTime(this));
-          }
-            break;
           case OTHER_PRIMARY_NOT_HOSTING:
-            // May occur when setHosting(false) is called
+          case CLOSED:
             // Profile update for other primary may have slipped in
+            // May occur when setHosting(false) is called
             primaryState = requestedState; {
             PartitionedRegionStats stats = getPartitionedRegionStats();
             stats.endVolunteeringClosed(stats.removeStartTime(this));
@@ -2122,17 +2187,9 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           case OTHER_PRIMARY_HOSTING:
             return false;
           case VOLUNTEERING_HOSTING:
-            // race condition ok, return false to abort volunteering
-            return false;
           case BECOMING_HOSTING:
             // race condition ok, return false to abort volunteering
             return false;
-          case CLOSED:
-            primaryState = requestedState; {
-            PartitionedRegionStats stats = getPartitionedRegionStats();
-            stats.endVolunteeringClosed(stats.removeStartTime(this));
-          }
-            break;
           default:
             throw new IllegalStateException(String.format("Cannot change from %s to %s",
                 primaryStateToString(),
@@ -2142,30 +2199,22 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       case IS_PRIMARY_HOSTING:
         switch (requestedState) {
           case NO_PRIMARY_HOSTING:
+            // case OTHER_PRIMARY_HOSTING: -- enable for bucket migration
+            // // rebalancing must have moved the primary
+            // changeFromPrimaryTo(requestedState);
+            // break;
+          case OTHER_PRIMARY_NOT_HOSTING:
+          case NO_PRIMARY_NOT_HOSTING:
+          case CLOSED:
+            // May occur when setHosting(false) is called due to closing
+            // rebalancing must have moved the primary and primary
             // rebalancing must have moved the primary
             changeFromPrimaryTo(requestedState);
             break;
-          // case OTHER_PRIMARY_HOSTING: -- enable for bucket migration
-          // // rebalancing must have moved the primary
-          // changeFromPrimaryTo(requestedState);
-          // break;
-          case OTHER_PRIMARY_NOT_HOSTING:
-            // rebalancing must have moved the primary and primary
-            changeFromPrimaryTo(requestedState);
-            break;
-          case NO_PRIMARY_NOT_HOSTING:
-            // May occur when setHosting(false) is called due to closing
-            changeFromPrimaryTo(requestedState);
-            break;
           case VOLUNTEERING_HOSTING:
-            // race condition ok, return false to abort volunteering
-            return false;
           case BECOMING_HOSTING:
             // race condition ok, return false to abort volunteering
             return false;
-          case CLOSED:
-            changeFromPrimaryTo(requestedState);
-            break;
           default:
             throw new IllegalStateException("Cannot change from " + primaryStateToString()
                 + " to " + primaryStateToString(requestedState));
@@ -2180,8 +2229,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
                 e);
             break;
           case VOLUNTEERING_HOSTING:
-            // race condition ok, return false to abort volunteering
-            return false;
           case BECOMING_HOSTING:
             // race condition ok, return false to abort volunteering
             return false;
@@ -2210,7 +2257,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   }
 
   @Override
-  public Set adviseDestroyRegion() {
+  public Set<InternalDistributedMember> adviseDestroyRegion() {
     // fix for bug 37604 - tell all owners of the pr that the bucket is being
     // destroyed. This is needed when bucket cleanup is performed
     return regionAdvisor.adviseAllPRNodes();
@@ -2238,17 +2285,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
 
   @Override
-  public Set adviseNetWrite() {
+  public Set<InternalDistributedMember> adviseNetWrite() {
     return regionAdvisor.adviseNetWrite();
-  }
-
-  @Override
-  public String toString() {
-    final StringBuilder sb = new StringBuilder("[BucketAdvisor ").append(getAdvisee().getFullPath())
-        .append(':').append(getAdvisee().getSerialNumber()).append(": ");
-    sb.append("state=").append(primaryStateToString());
-    sb.append("]");
-    return sb.toString();
   }
 
   // A listener for events on this bucket, and also for the entire PR
@@ -2276,13 +2314,17 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
    * Profile information for a remote bucket counterpart.
    */
   public static class BucketProfile extends CacheProfile {
-    /** True if this profile's member is attempting to initialize the bucket */
+    /**
+     * True if this profile's member is attempting to initialize the bucket
+     */
     public boolean isInitializing;
-    /** True if this profile's member is the primary for this bucket */
+    /**
+     * True if this profile's member is the primary for this bucket
+     */
     public boolean isPrimary;
     /**
-     * True if the profile is coming from a real BucketRegion acceptible states hosting = false,
-     * init = true hosting = true, init = false hosting = false, init = false unacceptible states
+     * True if the profile is coming from a real BucketRegion acceptable states hosting = false,
+     * init = true hosting = true, init = false hosting = false, init = false unacceptable states
      * hosting = true, init = true
      */
     public boolean isHosting;
@@ -2316,7 +2358,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
     @Override
     public void fromData(DataInput in,
-        DeserializationContext context) throws IOException, ClassNotFoundException {
+        DeserializationContext context)
+        throws IOException, ClassNotFoundException {
       super.fromData(in, context);
       isPrimary = in.readBoolean();
       isHosting = in.readBoolean();
@@ -2337,6 +2380,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
       return BUCKET_PROFILE;
     }
   }
+
   /**
    * Profile information for a remote bucket hosted by cache servers.
    */
@@ -2371,7 +2415,8 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
     @Override
     public void fromData(DataInput in,
-        DeserializationContext context) throws IOException, ClassNotFoundException {
+        DeserializationContext context)
+        throws IOException, ClassNotFoundException {
       super.fromData(in, context);
       bucketServerLocations = SerializationHelper.readBucketServerLocationSet(in);
       bucketId = DataSerializer.readPrimitiveInt(in);
@@ -2402,12 +2447,15 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
     @Override
     public boolean equals(Object obj) {
-      if (this == obj)
+      if (this == obj) {
         return true;
-      if (obj == null)
+      }
+      if (obj == null) {
         return false;
-      if (!(obj instanceof ServerBucketProfile))
+      }
+      if (!(obj instanceof ServerBucketProfile)) {
         return false;
+      }
       final ServerBucketProfile other = (ServerBucketProfile) obj;
       if (other.bucketId != bucketId) {
         return false;
@@ -2422,7 +2470,6 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   /**
    * Handles the actual volunteering to become primary bucket. Ensures that only one thread is ever
    * volunteering at one time.
-   *
    */
   class VolunteeringDelegate {
     /**
@@ -2450,12 +2497,18 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
      * BucketAdvisor. Caller must be synchronized on BucketAdvisor.
      */
     void volunteerForPrimary() {
+      SelectiveLogger selectiveLogger = new SelectiveLogger();
+      selectiveLogger.setPrepend(() -> "Bucket = " + getBucket().getName()
+          + " MLH VolunteeringDelegate.volunteerForPrimary ");
+      selectiveLogger.log(" 1 entered");
       boolean handedOff = false;
       while (!handedOff) {
         getAdvisee().getCancelCriterion().checkCancelInProgress(null);
         boolean interrupted = Thread.interrupted();
         try {
+          selectiveLogger.log(" 2 ");
           execute(this::doVolunteerForPrimary);
+          selectiveLogger.log(" 3 ");
           handedOff = true;
         } catch (InterruptedException e) {
           interrupted = true;
@@ -2464,6 +2517,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           if (interrupted) {
             Thread.currentThread().interrupt();
           }
+          selectiveLogger.log(" 4 finished").print();
         }
       }
     }
@@ -2489,24 +2543,28 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
      */
     void doVolunteerForPrimary() {
       SelectiveLogger selectiveLogger = new SelectiveLogger();
-      selectiveLogger.log("MLH doVolunteerForPrimary 1 entered ");
+      selectiveLogger.setPrepend(
+          () -> "Bucket = " + getBucket().getId() + " Region = "
+              + getBucket().getPartitionedRegion().getName() + " MLH doVolunteerForPrimary ");
+      selectiveLogger.log(" 1 entered ");
       if (!beginVolunteering()) {
-        selectiveLogger.log("MLH doVolunteerForPrimary 2 beginVolunteering false exited");
+        selectiveLogger.log(" 2 beginVolunteering false exited");
         return;
       }
       boolean dlsDestroyed = false;
+
       try {
-        selectiveLogger.log("MLH doVolunteerForPrimary 3");
+        selectiveLogger.log(" 3");
 
         if (logger.isDebugEnabled()) {
           logger.debug("Begin volunteerForPrimary for {}", BucketAdvisor.this);
         }
 
         DistributedMemberLock thePrimaryLock = null;
-        selectiveLogger.log("MLH doVolunteerForPrimary 4");
+        selectiveLogger.log(" 4");
 
         while (continueVolunteering()) {
-          selectiveLogger.log("MLH doVolunteerForPrimary 5");
+          selectiveLogger.log(" 5");
           // Fix for 41865 - We can't send out profiles while holding the
           // sync on this advisor, because that will cause a deadlock.
           // Holding the primaryMoveWriteLock here instead prevents any
@@ -2514,15 +2572,15 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           // are synced up. It also prevents a depose from happening until then.
           BucketAdvisor parentBA = parentAdvisor;
           primaryMoveWriteLock.lock();
-          selectiveLogger.log("MLH doVolunteerForPrimary 6 parentBA  " + parentBA);
+          selectiveLogger.log(" 6 parentBA  " + parentBA);
           try {
             boolean acquiredLock;
             getAdvisee().getCancelCriterion().checkCancelInProgress(null);
-            selectiveLogger.log("MLH doVolunteerForPrimary 7");
+            selectiveLogger.log(" 7");
             // Check our parent advisor and set our state
             // accordingly
             if (parentBA != null) {
-              selectiveLogger.log("MLH doVolunteerForPrimary 8 parentBA not null");
+              selectiveLogger.log(" 8 parentBA not null");
               // Fix for 44350 - we don't want to get a primary move lock on
               // the advisor, because that might deadlock with a user thread.
               // However, since all depose/elect operations on the parent bucket
@@ -2530,21 +2588,21 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
               // if should be safe to check this without the lock here.
               if (parentBA.isPrimary() && !isPrimary()) {
                 acquiredLock = acquiredPrimaryLock();
-                selectiveLogger.log("MLH doVolunteerForPrimary 9 parentBA.isPrimary() "
+                selectiveLogger.log(" 9 parentBA.isPrimary() "
                     + parentBA.isPrimary() + " !isPrimary() " + !isPrimary());
 
               } else {
-                selectiveLogger.log("MLH doVolunteerForPrimary 10 parentBA.isPrimary() "
+                selectiveLogger.log(" 10 parentBA.isPrimary() "
                     + parentBA.isPrimary() + " !isPrimary() " + !isPrimary());
                 return;
               }
             } else {
               // we're not colocated, need to get the dlock
               assignStartingBucketAdvisorIfFixedPartitioned(selectiveLogger);
-              selectiveLogger.log("MLH doVolunteerForPrimary 11 ");
+              selectiveLogger.log(" 11 ");
 
               if (startingBucketAdvisor != null) {
-                selectiveLogger.log("MLH doVolunteerForPrimary 12 startingBucketAdvisor = "
+                selectiveLogger.log(" 12  startingBucketAdvisor = "
                     + startingBucketAdvisor);
 
                 Assert.assertHoldsLock(this, false);
@@ -2552,19 +2610,20 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
                   if (startingBucketAdvisor.isPrimary() && !isPrimary()) {
                     acquiredLock = acquiredPrimaryLock();
                     selectiveLogger
-                        .log("MLH doVolunteerForPrimary 13a startingBucketAdvisor.isPrimary() "
+                        .log(" 13a startingBucketAdvisor.isPrimary() "
                             + startingBucketAdvisor.isPrimary() + " !isPrimary() " + !isPrimary());
-                    selectiveLogger.flush();
+                    selectiveLogger.print();
                   } else {
                     selectiveLogger
-                        .log("MLH doVolunteerForPrimary 13b startingBucketAdvisor.isPrimary() "
-                            + startingBucketAdvisor.isPrimary() + " !isPrimary() " + !isPrimary());
+                        .log(" 13b startingBucketAdvisor.isPrimary() "
+                            + startingBucketAdvisor.isPrimary() + " !isPrimary() " + !isPrimary()
+                            + "state = " + getPrimaryState());
                     selectiveLogger.print();
                     return;
                   }
                 }
               } else {
-                selectiveLogger.log("MLH doVolunteerForPrimary 14 startingBucketAdvisor = null");
+                selectiveLogger.log(" 14 startingBucketAdvisor = null");
                 if (thePrimaryLock == null) {
                   thePrimaryLock = getPrimaryLock(true);
                   if (thePrimaryLock == null) {
@@ -2572,11 +2631,11 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
                     // prevented us from creating the DLS... hope there's a thread closing this
                     // advisor but it's probably not safe to assert that it already happened
 
-                    selectiveLogger.log("MLH doVolunteerForPrimary 15 ");
+                    selectiveLogger.log(" 15 ").print();
                     return;
                   }
                 }
-                selectiveLogger.log("MLH doVolunteerForPrimary 16 ");
+                selectiveLogger.log(" 16 ");
 
                 assertTrue(!thePrimaryLock.holdsLock());
                 if (isAggressive()) {
@@ -2584,16 +2643,16 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
                 } else {
                   acquiredLock = thePrimaryLock.tryLock();
                 }
-                selectiveLogger.log("MLH doVolunteerForPrimary 17 ");
+                selectiveLogger.log(" 17 ");
 
                 if (acquiredLock) {
                   acquiredLock = acquiredPrimaryLock();
                 }
-                selectiveLogger.log("MLH doVolunteerForPrimary 18 ");
+                selectiveLogger.log(" 18 ");
 
               } // parentAdvisor == null
             }
-            selectiveLogger.log("MLH doVolunteerForPrimary 19 ");
+            selectiveLogger.log(" 19 ");
 
             if (acquiredLock) {
               // if the lock has been acquired then try to do the same for colocated PR's too
@@ -2602,52 +2661,54 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
               // BucketAdvisor.volunteerForPrimary()
               // Either way we have to guarantee that the bucket becomes primary for sure.(How to
               // guarantee?)
-              selectiveLogger.log("MLH doVolunteerForPrimary 20 ");
+              selectiveLogger.log(" 20 ");
 
-              acquirePrimaryRecursivelyForColocated();
-              acquirePrimaryForRestOfTheBucket();
+              acquirePrimaryRecursivelyForColocated(selectiveLogger);
+              acquirePrimaryForRestOfTheBucket(selectiveLogger);
+
               return;
             }
           } finally {
-            selectiveLogger.log("MLH doVolunteerForPrimary 21 ");
+            selectiveLogger.log(" 21 ").print();
 
             primaryMoveWriteLock.unlock();
           }
           // else: acquiredPrimaryLock released thePrimaryLock
-          selectiveLogger.log("MLH doVolunteerForPrimary 22 ");
+          selectiveLogger.log(" 22 ");
 
           if (!continueVolunteering()) {
             // this avoids calling the wait below...
+            selectiveLogger.log(" 22b ").print();
             return;
           }
-          selectiveLogger.log("MLH doVolunteerForPrimary 23 ");
+          selectiveLogger.log(" 23 ");
 
           waitIfNoPrimaryMemberFound();
         } // while
       } catch (LockServiceDestroyedException e) {
-        selectiveLogger.log("MLH doVolunteerForPrimary 24 e = " + e.getMessage());
+        selectiveLogger.log(" 24 e = " + e.getMessage());
         selectiveLogger.print();
         dlsDestroyed = true;
         handleException(e, true);
       } catch (RegionDestroyedException | CancelException e) {
-        selectiveLogger.log("MLH doVolunteerForPrimary 25 e = " + e.getMessage());
+        selectiveLogger.log(" 25 e = " + e.getMessage());
         selectiveLogger.print();
         handleException(e, false);
       } catch (InterruptedException e) {
-        selectiveLogger.log("MLH doVolunteerForPrimary 26 e = " + e.getMessage());
+        selectiveLogger.log(" 26 e = " + e.getMessage());
         selectiveLogger.print();
         Thread.currentThread().interrupt();
         handleException(e, false);
       } finally {
-
+        selectiveLogger
+            .log(" 27 exiting volunteering " + BucketAdvisor.this);
         if (logger.isDebugEnabled()) {
           logger.debug("Exit volunteerForPrimary for {}; dlsDestroyed={}", BucketAdvisor.this,
               dlsDestroyed);
         }
         endVolunteering();
       }
-      // selectiveLogger.log("MLH doVolunteerForPrimary 28 ");
-      selectiveLogger.flush();
+      selectiveLogger.log(" 28 ").print();
     }
 
     /**
@@ -2655,15 +2716,14 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
      * based on advisor settings and shutdown condition.
      *
      * @param e the RuntimeException that was caught while volunteering
-     * @param loggit true if message should be logged if shutdown condition is not met
+     * @param logIt true if message should be logged if shutdown condition is not met
      */
-    private void handleException(Exception e, boolean loggit) {
+    private void handleException(Exception e, boolean logIt) {
       boolean safe = isClosed() || getAdvisee().getCancelCriterion().isCancelInProgress();
       if (!safe) {
         if (ENFORCE_SAFE_CLOSE) {
-          assertTrue(safe,
-              "BucketAdvisor was not closed properly.");
-        } else if (loggit) {
+          fail("BucketAdvisor was not closed properly.");
+        } else if (logIt) {
           logger.warn("BucketAdvisor was not closed properly.", e);
         }
       }
@@ -2744,20 +2804,20 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
     }
 
     /**
-     * Executes the primary volunteering task after queuing it in the
-     * {@link BucketAdvisor#getVolunteeringQueue()}. A number of threads equal to
-     * {@link RegionAdvisor#VOLUNTEERING_THREAD_COUNT} are permitted to consume from the queue by
-     * acquiring permits from {@link BucketAdvisor#getVolunteeringSemaphore()}.
+     * Executes the primary volunteering task after queuing it in the {@link
+     * BucketAdvisor#getVolunteeringQueue()}. A number of threads equal to {@link
+     * RegionAdvisor#VOLUNTEERING_THREAD_COUNT} are permitted to consume from the queue by acquiring
+     * permits from {@link BucketAdvisor#getVolunteeringSemaphore()}.
      *
      * @param volunteeringTask the task to queue and then execute in waiting thread pool
-     *
      */
     private void execute(Runnable volunteeringTask) throws InterruptedException {
       // @todo: instead of having a semaphore and queue on RegionAdvisor
       // we should have an executor which limits its max threads to
       // VOLUNTEERING_THREAD_COUNT.
-      if (Thread.interrupted())
+      if (Thread.interrupted()) {
         throw new InterruptedException();
+      }
       Queue<Runnable> volunteeringQueue = getVolunteeringQueue();
       synchronized (volunteeringQueue) {
         // add the volunteering task
@@ -2800,7 +2860,7 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
               queuedWork = volunteeringQueue.poll();
               if (queuedWork == null) {
                 // the queue is empty... no more work... so return
-                // @todo why release the semaphore here are sync'ed?
+                // @todo why release the semaphore here are synchronized?
                 // we could just let the finally block do it.
                 getVolunteeringSemaphore().release();
                 releaseSemaphore = false;
@@ -2825,6 +2885,15 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
           }
         }
       };
+    }
+
+
+    @Override
+    public String toString() {
+      return "VolunteeringDelegate{" +
+          "volunteeringThread=" + volunteeringThread +
+          ", aggressive=" + aggressive +
+          '}';
     }
   }
 

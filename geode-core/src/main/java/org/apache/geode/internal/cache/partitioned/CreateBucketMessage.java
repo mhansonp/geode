@@ -44,6 +44,7 @@ import org.apache.geode.internal.cache.PartitionedRegionHelper;
 import org.apache.geode.internal.logging.log4j.LogMarker;
 import org.apache.geode.internal.serialization.DeserializationContext;
 import org.apache.geode.internal.serialization.SerializationContext;
+import org.apache.geode.logging.internal.SelectiveLogger;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 
 /**
@@ -125,6 +126,11 @@ public class CreateBucketMessage extends PartitionMessage {
   @Override
   protected boolean operateOnPartitionedRegion(ClusterDistributionManager dm, PartitionedRegion r,
       long startTime) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> "dm = " + dm.getDistributionManagerId().getName() + "PR = "
+        + r.getName() + " MLH operateOnPartitionedRegion ");
+    selectiveLogger.log(" 1 entered ");
+
     if (logger.isTraceEnabled(LogMarker.DM_VERBOSE)) {
       logger.trace(LogMarker.DM_VERBOSE, "CreateBucketMessage operateOnRegion: {}",
           r.getFullPath());
@@ -135,6 +141,7 @@ public class CreateBucketMessage extends PartitionMessage {
     if (!r.isInitialized()) {
       // This VM is NOT ready to manage a new bucket, refuse operation
       CreateBucketReplyMessage.sendResponse(getSender(), getProcessorId(), dm, null);
+      selectiveLogger.log(" 2  exit false r is not initialized").print();
       return false;
     }
 
@@ -145,12 +152,18 @@ public class CreateBucketMessage extends PartitionMessage {
       FixedPartitionAttributesImpl fpa =
           PartitionedRegionHelper.getFixedPartitionAttributesForBucket(r, bucketId);
       partitionName = fpa.getPartitionName();
+      if (partitionName == "Quarter2" && bucketId == 7)
+        selectiveLogger.log(" 3  partitionName = " + partitionName + "for Bucket = " + bucketId);
     }
     r.checkReadiness();
     InternalDistributedMember primary = r.getRedundancyProvider().createBucketAtomically(bucketId,
         bucketSize, false, partitionName);
+    selectiveLogger.log(" 4  primary = " + primary);
+
     r.getPrStats().endPartitionMessagesProcessing(startTime);
+
     CreateBucketReplyMessage.sendResponse(getSender(), getProcessorId(), dm, primary);
+    selectiveLogger.log(" 5  exit false").print();
     return false;
   }
 

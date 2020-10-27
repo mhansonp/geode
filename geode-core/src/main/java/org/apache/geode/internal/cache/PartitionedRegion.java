@@ -254,6 +254,7 @@ import org.apache.geode.internal.size.Sizeable;
 import org.apache.geode.internal.statistics.StatisticsClock;
 import org.apache.geode.internal.util.TransformUtils;
 import org.apache.geode.internal.util.concurrent.StoppableCountDownLatch;
+import org.apache.geode.logging.internal.SelectiveLogger;
 import org.apache.geode.logging.internal.executors.LoggingExecutors;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.util.internal.GeodeGlossary;
@@ -3211,11 +3212,17 @@ public class PartitionedRegion extends LocalRegion
   public InternalDistributedMember getNodeForBucketWrite(int bucketId,
       final RetryTimeKeeper snoozer) {
     final boolean isDebugEnabled = logger.isDebugEnabled();
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(
+        () -> "Bucket = " + bucketId + " : MLH getNodeForBucketWrite ");
+    selectiveLogger.log("entered");
 
     RetryTimeKeeper localSnoozer = snoozer;
     // Prevent early access to buckets that are not completely created/formed
-    // and
-    // prevent writing to a bucket whose redundancy is sub par
+    // and prevent writing to a bucket whose redundancy is sub par
+    selectiveLogger.log(" 2 minimumWriteRedundancy = " + minimumWriteRedundancy
+        + " getRegionAdvisor().getBucketRedundancy(bucketId)"
+        + getRegionAdvisor().getBucketRedundancy(bucketId));
     while (minimumWriteRedundancy > 0
         && getRegionAdvisor().getBucketRedundancy(bucketId) < this.minimumWriteRedundancy) {
       this.cache.getCancelCriterion().checkCancelInProgress(null);
@@ -3228,6 +3235,7 @@ public class PartitionedRegion extends LocalRegion
           logger.debug("No storage assigned for bucket ({}{}{}) writer", getPRId(),
               BUCKET_ID_SEPARATOR, bucketId);
         }
+        selectiveLogger.log("3 returning null, no bucket for this key!").print();
         return null; // No bucket for this key
       }
 
@@ -3236,15 +3244,19 @@ public class PartitionedRegion extends LocalRegion
       }
 
       if (!localSnoozer.overMaximum()) {
+        selectiveLogger.log("4 waiting for bucket recovery");
         localSnoozer.waitForBucketsRecovery();
       } else {
         int red = getRegionAdvisor().getBucketRedundancy(bucketId);
+        selectiveLogger.log("5 redundancy = " + red);
+
         final TimeoutException noTime = new TimeoutException(
             String.format(
                 "Attempt to acquire primary node for write on bucket %s timed out in %s ms. Current redundancy [ %s ] does not satisfy minimum [ %s ]",
                 new Object[] {bucketStringForLogs(bucketId),
                     localSnoozer.getRetryTime(), red, this.minimumWriteRedundancy}));
         checkReadiness();
+        selectiveLogger.log("6 Attempt to acquire primary node for write on bucket failed").print();
         throw noTime;
       }
     }
@@ -3252,6 +3264,7 @@ public class PartitionedRegion extends LocalRegion
     // This loop can possibly create a soft hang if no primary is ever selected.
     // This is preferable to returning null since it will prevent obtaining the
     // bucket lock for bucket creation.
+    selectiveLogger.log("7 calling waitForNoStorageOrPrimary").print();
     return waitForNoStorageOrPrimary(bucketId, "write");
   }
 
@@ -3263,12 +3276,17 @@ public class PartitionedRegion extends LocalRegion
    * @return the primary member's id or null if there is no storage
    */
   private InternalDistributedMember waitForNoStorageOrPrimary(int bucketId, String readOrWrite) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(
+        () -> "Bucket = " + bucketId + " : MLH waitForNoStorageOrPrimary ");
+    selectiveLogger.log("entered");
     boolean isInterrupted = false;
     try {
       for (;;) {
         isInterrupted = Thread.interrupted() || isInterrupted;
         InternalDistributedMember d = getBucketPrimary(bucketId);
         if (d != null) {
+          selectiveLogger.log("2 successfully waited for storage, primary = " + d).print();
           return d; // success!
         } else {
           // go around the loop again
@@ -3282,11 +3300,13 @@ public class PartitionedRegion extends LocalRegion
             logger.debug("No storage while waiting for primary for bucket ({}{}{}) {}", getPRId(),
                 BUCKET_ID_SEPARATOR, bucketId, readOrWrite);
           }
+          selectiveLogger.log("3 no bucket for this key").print();
           return null; // No bucket for this key
         }
         checkShutdown();
       }
     } finally {
+
       if (isInterrupted) {
         Thread.currentThread().interrupt();
       }
@@ -3441,36 +3461,50 @@ public class PartitionedRegion extends LocalRegion
    */
   public InternalDistributedMember createBucket(int bucketId, int size,
       final RetryTimeKeeper snoozer) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(
+        () -> "Bucket = " + bucketId + " : MLH createBucket ");
+    selectiveLogger.log("entered");
 
     InternalDistributedMember ret = getNodeForBucketWrite(bucketId, snoozer);
     if (ret != null) {
+      selectiveLogger.log(" 2 returning ret = " + ret).print();
       return ret;
     }
+
     // In the current co-location scheme, we have to create the bucket for the
     // colocatedWith region, before we create bucket for this region
     final PartitionedRegion colocatedWith = ColocationHelper.getColocatedRegion(this);
     if (colocatedWith != null) {
+      selectiveLogger.log(" 3 colocatedWith = " + colocatedWith);
       colocatedWith.createBucket(bucketId, size, snoozer);
     }
-
     // THis is for FPR.if the given bucket id is not starting bucket id then
     // create bucket for starting bucket id
     String partitionName = null;
     if (this.isFixedPartitionedRegion()) {
+      selectiveLogger.log("4 is fixed partition region.");
+
       FixedPartitionAttributesImpl fpa =
           PartitionedRegionHelper.getFixedPartitionAttributesForBucket(this, bucketId);
+
       partitionName = fpa.getPartitionName();
+
       int startBucketId = fpa.getStartingBucketID();
+
       if (startBucketId == -1) {
         throw new PartitionNotAvailableException(
             String.format(
                 "For FixedPartitionedRegion %s, Partition %s is not yet initialized on datastore",
-                new Object[] {getName(), partitionName}));
+                getName(), partitionName));
       }
       if (startBucketId != bucketId) {
+        selectiveLogger.log("5 startBucketId = " + startBucketId);
+
         createBucket(startBucketId, size, snoozer);
       }
     }
+    selectiveLogger.print();
     // Potentially no storage assigned, start bucket creation, be careful of race
     // conditions
     final long startTime = prStats.getTime();
@@ -3480,6 +3514,7 @@ public class PartitionedRegion extends LocalRegion
     } else {
       ret = this.redundancyProvider.createBucketOnDataStore(bucketId, size, snoozer);
     }
+    selectiveLogger.log("isDataStore = " + isDataStore() + " distributedMember = " + ret).print();
     return ret;
   }
 
@@ -9605,16 +9640,29 @@ public class PartitionedRegion extends LocalRegion
 
   @Override
   public DistributedMember getOwnerForKey(KeyInfo key) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> "MLH getOwnerForKey key = " + key);
+    selectiveLogger.log(" 1 entered");
+
     if (key == null) {
+      selectiveLogger.log(" 2 key was null letting super handle it").print();
       return super.getOwnerForKey(null);
     }
+
     // TODO provide appropriate Operation and arg
     int bucketId = key.getBucketId();
+    selectiveLogger.log(" 3 Bucket = " + bucketId);
+
     if (bucketId == KeyInfo.UNKNOWN_BUCKET) {
       bucketId = PartitionedRegionHelper.getHashKey(this, null, key.getKey(), key.getValue(),
           key.getCallbackArg());
+      selectiveLogger.log(" 4 Bucket was unknown, so getHashKey bucketId = " + bucketId);
+
       key.setBucketId(bucketId);
+      selectiveLogger.log(" 5 set the bucket for key = " + key);
+
     }
+    selectiveLogger.log(" 6 calling createBucket for Bucket = " + bucketId).print();
     return createBucket(bucketId, 0, null);
   }
 
@@ -9849,6 +9897,10 @@ public class PartitionedRegion extends LocalRegion
    * Partitioned Region) is stored in metadata for each member.
    */
   private void calculateStartingBucketIDs(PartitionRegionConfig prConfig) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> " This = " + this + " MLH calculateStartingBucketIDs ");
+    selectiveLogger.log(" 1 entered prConfig  = " + prConfig);
+
     if (BEFORE_CALCULATE_STARTING_BUCKET_FLAG) {
       PartitionedRegionObserver pro = PartitionedRegionObserverHolder.getInstance();
       pro.beforeCalculatingStartingBucketId();
@@ -9864,6 +9916,8 @@ public class PartitionedRegion extends LocalRegion
           if (fpa.getStartingBucketID() > largestStartBucId) {
             largestStartBucId = fpa.getStartingBucketID();
             startingBucketID = largestStartBucId + fpa.getNumBuckets();
+            selectiveLogger.log(" 2 huh?? largestStartBucId = " + largestStartBucId
+                + " startingBucketID = " + startingBucketID);
           }
         }
       }
@@ -9872,11 +9926,17 @@ public class PartitionedRegion extends LocalRegion
           for (FixedPartitionAttributesImpl remotefpa : elderFPAs) {
             if (remotefpa.equals(fpaImpl)) {
               fpaImpl.setStartingBucketID(remotefpa.getStartingBucketID());
+              selectiveLogger.log(" 3 fpaImpl = " + fpaImpl + "remotefpa = " + remotefpa
+                  + " setStartingBucketID = " + remotefpa.getStartingBucketID());
             }
           }
         } else {
           fpaImpl.setStartingBucketID(startingBucketID);
+          selectiveLogger
+              .log(" 4 fpaImpl = " + fpaImpl + " setStartingBucketID = " + startingBucketID);
           startingBucketID += fpaImpl.getNumBuckets();
+          selectiveLogger
+              .log(" 5 fpaImpl = " + fpaImpl + " startingBucketID = " + startingBucketID);
         }
       }
     }
@@ -9885,6 +9945,8 @@ public class PartitionedRegion extends LocalRegion
       this.partitionsMap.put(fxPrAttr.getPartitionName(),
           new Integer[] {fxPrAttr.getStartingBucketID(), fxPrAttr.getNumBuckets()});
     }
+
+    selectiveLogger.print();
   }
 
   /**

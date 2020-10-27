@@ -50,6 +50,7 @@ import org.apache.geode.internal.cache.partitioned.Bucket;
 import org.apache.geode.internal.cache.persistence.PersistentMemberID;
 import org.apache.geode.internal.cache.persistence.PersistentMemberManager;
 import org.apache.geode.internal.cache.persistence.PersistentMembershipView;
+import org.apache.geode.logging.internal.SelectiveLogger;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 
 /**
@@ -88,6 +89,12 @@ public class ProxyBucketRegion implements Bucket {
    */
   public ProxyBucketRegion(int bid, PartitionedRegion partitionedRegion,
       InternalRegionArguments internalRegionArgs) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> " This = " + this.getName() + " MLH ProxyBucketRegion ");
+    selectiveLogger
+        .log(" 1 entered bid  = " + bid + " partitionedRegion = " + partitionedRegion.getName()
+            + " internalRegionArgs = " + internalRegionArgs);
+
     this.serialNumber = DistributionAdvisor.createSerialNumber();
     this.bid = bid;
     this.partitionedRegion = partitionedRegion;
@@ -137,6 +144,9 @@ public class ProxyBucketRegion implements Bucket {
           if (fpa.getPartitionName().equals(this.diskRegion.getPartitionName())
               && this.diskRegion.getStartingBucketId() != -1) {
             fpa.setStartingBucketID(this.diskRegion.getStartingBucketId());
+            selectiveLogger
+                .log(" 2 setStartingBucketID  = " + this.diskRegion.getStartingBucketId());
+
             partitionedRegion.getPartitionsMap().put(fpa.getPartitionName(),
                 new Integer[] {fpa.getStartingBucketID(), fpa.getNumBuckets()});
           }
@@ -149,6 +159,7 @@ public class ProxyBucketRegion implements Bucket {
       this.diskRegion = null;
       this.persistenceAdvisor = null;
     }
+    selectiveLogger.print();
   }
 
   @Override
@@ -645,7 +656,6 @@ public class ProxyBucketRegion implements Bucket {
 
   void waitForPrimaryPersistentRecovery() {
     persistenceAdvisor.waitForPrimaryPersistentRecovery();
-
   }
 
   void initializePrimaryElector(InternalDistributedMember creationRequestor) {
@@ -660,11 +670,26 @@ public class ProxyBucketRegion implements Bucket {
     if (persistenceAdvisor != null) {
       persistenceAdvisor.setAtomicCreation(false);
     }
-
   }
 
   @Override
   public void remoteRegionInitialized(CacheProfile profile) {
     // no-op for proxy bucket regions, which have no region membership listeners to notify
+  }
+
+  @Override
+  public String toString() {
+    return "ProxyBucketRegion{" +
+        "serialNumber=" + serialNumber +
+        ", bid=" + bid +
+        ", partitionedRegion=" + partitionedRegion +
+        ", advisor=" + advisor +
+        ", persistenceAdvisor=" + persistenceAdvisor +
+        ", realBucket=" + realBucket +
+        ", bucketSick=" + bucketSick +
+        ", sickHosts=" + sickHosts +
+        ", diskRegion=" + diskRegion +
+        ", bucketLock=" + bucketLock +
+        '}';
   }
 }

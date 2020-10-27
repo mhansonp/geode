@@ -43,6 +43,7 @@ import org.apache.geode.internal.cache.PartitionedRegionDataStore;
 import org.apache.geode.internal.logging.log4j.LogMarker;
 import org.apache.geode.internal.serialization.DeserializationContext;
 import org.apache.geode.internal.serialization.SerializationContext;
+import org.apache.geode.logging.internal.SelectiveLogger;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 
 /**
@@ -100,6 +101,9 @@ public class ManageBucketMessage extends PartitionMessage {
    */
   public static NodeResponse send(InternalDistributedMember recipient, PartitionedRegion r,
       int bucketId, int bucketSize, boolean forceCreation) throws ForceReattemptException {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> "Bucket = " + bucketId + " MLH ManageBucketMessage:send ");
+    selectiveLogger.log("1 entered").print();
     Assert.assertTrue(recipient != null, "ManageBucketMessage NULL recipient");
     NodeResponse p = new NodeResponse(r.getSystem(), recipient);
     ManageBucketMessage m =
@@ -110,10 +114,12 @@ public class ManageBucketMessage extends PartitionMessage {
 
     Set failures = r.getDistributionManager().putOutgoing(m);
     if (failures != null && failures.size() > 0) {
+      selectiveLogger.log("2 throwing ForceReattemptException failed sending to " + m).print();
+
       throw new ForceReattemptException(
           String.format("Failed sending < %s >", m));
     }
-
+    selectiveLogger.log("3 finished with response = " + p).print();
     return p;
   }
 
@@ -130,10 +136,10 @@ public class ManageBucketMessage extends PartitionMessage {
   @Override
   protected boolean operateOnPartitionedRegion(ClusterDistributionManager dm, PartitionedRegion r,
       long startTime) {
-    if (logger.isTraceEnabled(LogMarker.DM_VERBOSE)) {
-      logger.trace(LogMarker.DM_VERBOSE, "ManageBucketMessage operateOnRegion: {}",
-          r.getFullPath());
-    }
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger
+        .setPrepend(() -> "Bucket = " + bucketId + " MLH ManageBucketMessage:operateOnRegion ");
+    selectiveLogger.log("1 entered").print();
 
     // This is to ensure that initialization is complete before bucket creation request is
     // serviced. BUGFIX for 35888

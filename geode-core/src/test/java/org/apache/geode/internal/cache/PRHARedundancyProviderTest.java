@@ -247,6 +247,49 @@ public class PRHARedundancyProviderTest {
     verify(providerStartupTask).complete(any());
   }
 
+  // @Test
+  // public void testCreateBucketAtomicallyRecoversAfterPrimaryIsDown() {
+  // int bucketId = 5;
+  // int newBucketSize = 0;
+  // boolean finishIncompleteCreation = false;
+  // String partitionName = "Quarter2";
+  // InternalDistributedMember internalDistributedMember = mock(InternalDistributedMember.class);
+  // DistributedSystem distributedSystem = mock(DistributedSystem.class);
+  // when(distributedSystem.getCancelCriterion()).thenReturn(mock(CancelCriterion.class));
+  //
+  // InternalCache cache = mock(InternalCache.class);
+  // when(cache.getDistributedSystem()).thenReturn(distributedSystem);
+  // when(cache.isCacheAtShutdownAll()).thenReturn(false);
+  // when(partitionedRegion.getGemFireCache()).thenReturn(cache);
+  // when(partitionedRegion.getRegionAdvisor()).thenReturn(mock(RegionAdvisor.class));
+  // when(partitionedRegion.getPartitionAttributes()).thenReturn(mock(PartitionAttributes.class));
+  // when(partitionedRegion.isDataStore()).thenReturn(true);
+  // when(partitionedRegion.getPrStats()).thenReturn(mock(PartitionedRegionStats.class));
+  // RegionAttributes<Object, Object> regionAttributes = (new AttributesFactory<>()).create();
+  // BucketRegion bucketRegion = new BucketRegion("partitionRegion", regionAttributes,
+  // partitionedRegion, cache, new InternalRegionArguments(), cache.getStatisticsClock());
+  // when(partitionedRegion.getRegionAdvisor().getBucket(bucketId)).thenReturn(bucketRegion);
+  // when(partitionedRegion.getBucketPrimary(bucketId)).thenReturn(null);
+  //
+  // ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+  // when(resourceManager.getExecutor()).thenReturn(executorService);
+  //
+  // when(executorService.schedule(any(Runnable.class), anyLong(), any()))
+  // .thenAnswer(runTheRunnable());
+  //
+  // @SuppressWarnings("unchecked")
+  // CompletableFuture<Void> providerStartupTask = mock(CompletableFuture.class);
+  //
+  // prHaRedundancyProvider = new PRHARedundancyProvider(partitionedRegion, resourceManager,
+  // (a, b) -> mock(PersistentBucketRecoverer.class),
+  // PRHARedundancyProviderTest::createRebalanceOp, providerStartupTask);
+  //
+  // InternalDistributedMember member = prHaRedundancyProvider.createBucketAtomically(bucketId,
+  // newBucketSize,
+  // finishIncompleteCreation, partitionName);
+  // assertThat(member).isEqualTo(internalDistributedMember);
+  // }
+
   @Test
   @Parameters({"RUNTIME", "CANCEL", "REGION_DESTROYED"})
   @TestCaseName("{method}[{index}]: {params}")

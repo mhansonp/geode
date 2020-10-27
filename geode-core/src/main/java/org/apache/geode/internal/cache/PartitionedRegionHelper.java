@@ -19,6 +19,7 @@ import static org.apache.geode.cache.Region.SEPARATOR_CHAR;
 import static org.apache.geode.internal.cache.LocalRegion.InitializationLevel.ANY_INIT;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -57,6 +58,7 @@ import org.apache.geode.internal.cache.LocalRegion.InitializationLevel;
 import org.apache.geode.internal.cache.partitioned.Bucket;
 import org.apache.geode.internal.cache.partitioned.PRLocallyDestroyedException;
 import org.apache.geode.internal.cache.partitioned.RegionAdvisor;
+import org.apache.geode.logging.internal.SelectiveLogger;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.util.internal.GeodeGlossary;
 
@@ -514,14 +516,23 @@ public class PartitionedRegionHelper {
    */
   private static int getHashKey(EntryOperation event, PartitionedRegion pr, Operation operation,
       Object key, Object value, Object callbackArgument) {
+    final PartitionedRegion finalPr = pr;
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger
+        .setPrepend(() -> " MLH getHashKey ");
+    selectiveLogger.log(" 1 entered ");
     // avoid creating EntryOperation if there is no resolver
     if (event != null) {
       pr = (PartitionedRegion) event.getRegion();
       key = event.getKey();
       callbackArgument = event.getCallbackArgument();
     }
+    selectiveLogger.log(" 2  pr =  " + pr.getName());
 
     PartitionResolver resolver = getResolver(pr, key, callbackArgument);
+    if (resolver != null) {
+      selectiveLogger.log(" 3 PartitionResolver =  " + resolver.getClass().getCanonicalName());
+    }
     Object resolveKey = null;
     if (pr.isFixedPartitionedRegion()) {
       String partition = null;
@@ -532,12 +543,15 @@ public class PartitionedRegionHelper {
         }
         partition =
             ((FixedPartitionResolver) resolver).getPartitionName(event, partitionMap.keySet());
+        selectiveLogger.log(" 4 called resolver.getPartitionName partition = " + partition);
+
         if (partition == null) {
           Object[] prms = new Object[] {pr.getName(), resolver};
           throw new IllegalStateException(
               String.format("For region %s, partition resolver %s returned partition name null",
                   prms));
         }
+
         Integer[] bucketArray = partitionMap.get(partition);
         if (bucketArray == null) {
           Object[] prms = new Object[] {pr.getName(), partition};
@@ -546,8 +560,12 @@ public class PartitionedRegionHelper {
                   "For FixedPartitionedRegion %s, partition %s is not available on any datastore.",
                   prms));
         }
+        selectiveLogger.log(" 5 bucketArray = " + Arrays.toString(bucketArray));
+
         int numBukets = bucketArray[1];
         resolveKey = (numBukets == 1) ? partition : resolver.getRoutingObject(event);
+        selectiveLogger.log(" 6 resolveKey = " + resolveKey);
+
       } else if (resolver == null) {
         throw new IllegalStateException(
             String.format(
@@ -560,6 +578,9 @@ public class PartitionedRegionHelper {
                 "For FixedPartitionedRegion %s, Resolver defined %s is not an instance of FixedPartitionResolver",
                 prms));
       }
+      selectiveLogger.log(" 7 assignFixedBucketId called pr = " + pr + " partition = " + partition
+          + "resolveKey = " + resolveKey).print();
+
       return assignFixedBucketId(pr, partition, resolveKey);
     } else {
       // Calculate resolveKey.
@@ -579,6 +600,8 @@ public class PartitionedRegionHelper {
               "The RoutingObject returned by PartitionResolver is null. Resolver: " + resolver);
         }
       }
+      selectiveLogger.log(" 6 getHashKey called pr = " + pr + "resolveKey = " + resolveKey).print();
+
       // Finally, calculate the hash.
       return getHashKey(pr, resolveKey);
     }
@@ -586,18 +609,25 @@ public class PartitionedRegionHelper {
 
   private static int assignFixedBucketId(PartitionedRegion pr, String partition,
       Object resolveKey) {
+    final PartitionedRegion finalPr = pr;
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger
+        .setPrepend(() -> "PartitionedRegion = " + finalPr.getFullPath() + " MLH getHashKey ");
+    selectiveLogger.log(" 1 entered partition = " + partition + " resolveKey = " + resolveKey);
     int startingBucketID = 0;
     int partitionNumBuckets = 0;
     boolean isPartitionAvailable = pr.getPartitionsMap().containsKey(partition);
-    Integer[] partitionDeatils = pr.getPartitionsMap().get(partition);
+    Integer[] partitionDetails = pr.getPartitionsMap().get(partition);
     if (isPartitionAvailable) {
-      startingBucketID = partitionDeatils[0];
-      partitionNumBuckets = partitionDeatils[1];
+      startingBucketID = partitionDetails[0];
+      partitionNumBuckets = partitionDetails[1];
 
       int hc = resolveKey.hashCode();
       int bucketId = Math.abs(hc % partitionNumBuckets);
       int partitionBucketID = bucketId + startingBucketID;
       assert partitionBucketID != KeyInfo.UNKNOWN_BUCKET;
+      selectiveLogger.log(" 2 returning  partitionBucketID = " + partitionBucketID).print();
+
       return partitionBucketID;
     }
     List<FixedPartitionAttributesImpl> localFPAs = pr.getFixedPartitionAttributesImpl();
@@ -608,6 +638,9 @@ public class PartitionedRegionHelper {
           isPartitionAvailable = true;
           partitionNumBuckets = fpa.getNumBuckets();
           startingBucketID = fpa.getStartingBucketID();
+          selectiveLogger.log(" 3 returning  startingBucketID = " + startingBucketID
+              + " partitionNumBuckets = " + partitionNumBuckets);
+
           break;
         }
       }
@@ -621,6 +654,9 @@ public class PartitionedRegionHelper {
           isPartitionAvailable = true;
           partitionNumBuckets = fpa.getNumBuckets();
           startingBucketID = fpa.getStartingBucketID();
+          selectiveLogger.log(" 4 returning  startingBucketID = " + startingBucketID
+              + " partitionNumBuckets = " + partitionNumBuckets);
+
           break;
         }
       }
@@ -642,10 +678,15 @@ public class PartitionedRegionHelper {
           String.format("For region %s, partition name %s is not available on any datastore.",
               prms));
     }
+
     int hc = resolveKey.hashCode();
     int bucketId = Math.abs(hc % partitionNumBuckets);
     int partitionBucketID = bucketId + startingBucketID;
     assert partitionBucketID != KeyInfo.UNKNOWN_BUCKET;
+    selectiveLogger
+        .log(" 5 returning bucketId = " + bucketId + " partitionBucketID = " + partitionBucketID)
+        .print();
+
     return partitionBucketID;
   }
 
@@ -873,20 +914,27 @@ public class PartitionedRegionHelper {
 
   public static FixedPartitionAttributesImpl getFixedPartitionAttributesForBucket(
       PartitionedRegion pr, int bucketId) {
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(
+        () -> "Bucket = " + bucketId + " partition.fpa = " + pr.getFixedPartitionAttributesImpl()
+            + " MLH getFixedPartitionAttributesForBucket");
+    selectiveLogger.log(" 1 entered");
     List<FixedPartitionAttributesImpl> localFPAs = pr.getFixedPartitionAttributesImpl();
 
     if (localFPAs != null) {
       for (FixedPartitionAttributesImpl fpa : localFPAs) {
         if (fpa.hasBucket(bucketId)) {
+          selectiveLogger.log(" 2 returning fpa = " + fpa).print();
           return fpa;
         }
       }
     }
-
+    selectiveLogger.log(" 3 ");
     List<FixedPartitionAttributesImpl> remoteFPAs =
         pr.getRegionAdvisor().adviseAllFixedPartitionAttributes();
     for (FixedPartitionAttributesImpl fpa : remoteFPAs) {
       if (fpa.hasBucket(bucketId)) {
+        selectiveLogger.log(" 4 returning fpa = " + fpa).print();
         return fpa;
       }
     }
