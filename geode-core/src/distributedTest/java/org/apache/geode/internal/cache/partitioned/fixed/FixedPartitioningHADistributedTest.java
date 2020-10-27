@@ -104,20 +104,19 @@ public class FixedPartitioningHADistributedTest implements Serializable {
   public DistributedExecutorServiceRule executorServiceRule = new DistributedExecutorServiceRule();
   @Rule
   public SerializableTemporaryFolder temporaryFolder = new SerializableTemporaryFolder();
+
   @Rule
   public RandomRule randomRule = new RandomRule();
 
   @Before
   public void setUp() {
-    partitions = randomRule.nextInt(3, 10);
-    buckets = randomRule.nextInt(3, 20);
+    partitions = 4;
+    buckets = 3;
 
     for (int whichVM = -1; whichVM < partitions; whichVM++) {
       getVM(whichVM).invoke(() -> {
         PARTITIONS = partitions;
         BUCKETS_PER_PARTITION = buckets;
-        System.out
-            .println("MLH PARTITIONS = " + partitions + " BUCKETS_PER_PARTITION = " + buckets);
         COUNT = partitions * buckets;
         TOTAL_NUM_BUCKETS = COUNT;
         BUCKET_TO_PARTITION = initialize(new HashMap<>());
@@ -143,7 +142,7 @@ public class FixedPartitioningHADistributedTest implements Serializable {
       getVM(vmId).invoke(() -> startServer(vmId, "datastore" + vmId, LOCAL_MAX_MEMORY));
     }
 
-    getController().invoke(() -> startServer(getController().getId(), "accessor1"));
+    getController().invoke(() -> startServer(getController().getId(), "accessor1", 0));
 
     for (int vmId = -1; vmId < PARTITIONS; vmId++) {
       getVM(vmId).invoke(() -> {
@@ -194,6 +193,7 @@ public class FixedPartitioningHADistributedTest implements Serializable {
     getVM(serversToBounce())
         .bounceForcibly()
         .invoke(() -> {
+          // Thread.sleep(300000);
           System.out.println("KIRK: about to bounce " + getVMId());
 
           doPuts.set(new AtomicBoolean(true));
@@ -227,15 +227,10 @@ public class FixedPartitioningHADistributedTest implements Serializable {
     getController().invoke(this::validateBucketsHavePrimary);
   }
 
-  private void startServer(int vm, String name) {
-    startServer(vm, name, 0);
-  }
-
   private void startServer(int vm, String name, int localMaxMemory) {
 
     PARTITIONS = partitions;
     BUCKETS_PER_PARTITION = buckets;
-    System.out.println("MLH PARTITIONS = " + partitions + " BUCKETS_PER_PARTITION = " + buckets);
     COUNT = partitions * buckets;
     TOTAL_NUM_BUCKETS = COUNT;
     BUCKET_TO_PARTITION = initialize(new HashMap<>());

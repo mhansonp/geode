@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1352,6 +1353,13 @@ public class DistributionAdvisor {
     if (numActiveProfiles > 0) {
       numActiveProfiles--;
     }
+  }
+
+  @Override
+  public String toString() {
+    return "DistributionAdvisor{" +
+        ", profiles=" + Arrays.toString(profiles) +
+        '}';
   }
 
   @FunctionalInterface

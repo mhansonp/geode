@@ -16,34 +16,58 @@ package org.apache.geode.logging.internal;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 import org.apache.logging.log4j.Logger;
 
 import org.apache.geode.logging.internal.log4j.api.LogService;
 
+/**
+ * SelectiveLogger
+ * This class' purpose is to enable one to log a bunch of data that will
+ * be helpful in some event. In the case that the event occurs, one uses the
+ * print routine, and the log statements will be added to the log. Otherwise,
+ * just use the clear option to clear the list. This is best thought of as a
+ * debug tool. Using this as a static or something like that would be a bad
+ * idea.
+ */
+
 public class SelectiveLogger {
   final List<String> logMessages = new ArrayList<>();
   Logger logger = LogService.getLogger();
+  Supplier<String> prependSupplier;
 
-  public void log(String message) {
-    synchronized (logMessages) {
-      logMessages.add(message);
-    }
+  public SelectiveLogger setPrepend(Supplier<String> stringSupplier) {
+    prependSupplier = stringSupplier;
+    return this;
   }
 
-  public void print() {
-    synchronized (logMessages) {
-      for (String message : logMessages) {
-        logger.info(message);
-      }
-      logger.info("Informational stack dump", new Exception("Showing stack trace"));
-      logMessages.clear();
-    }
+  /**
+   * log
+   * The purpose of this method is to add a log message that maybe printed out to the
+   * list of messages.
+   *
+   * @param message - the string to be output into the logs
+   */
+  public SelectiveLogger log(String message) {
+    logger.info(prependSupplier.get() + " " + message);
+    return this;
   }
 
+  /**
+   * This method will print the log messages to log service and clear the list
+   */
+  public SelectiveLogger print() {
+    logger.info(prependSupplier.get() + " Informational stack dump",
+        new Exception("Showing stack trace"));
+    logMessages.clear();
+    return this;
+  }
+
+  /**
+   * The method clears the list of log messages
+   */
   public void flush() {
-    synchronized (logMessages) {
-      logMessages.clear();
-    }
+    logMessages.clear();
   }
 }
