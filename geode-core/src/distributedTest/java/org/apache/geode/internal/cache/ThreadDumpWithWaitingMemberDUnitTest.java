@@ -19,7 +19,6 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.apache.geode.test.dunit.VM.getHostName;
 import static org.apache.geode.test.dunit.VM.getVM;
 import static org.apache.geode.test.dunit.internal.JUnit4DistributedTestCase.getBlackboard;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -32,7 +31,6 @@ import java.lang.management.ThreadMXBean;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import sun.jvm.hotspot.StackTrace;
 
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionFactory;
@@ -46,7 +44,6 @@ import org.apache.geode.distributed.internal.ClusterDistributionManager;
 import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.DistributionMessage;
 import org.apache.geode.distributed.internal.DistributionMessageObserver;
-import org.apache.geode.internal.cache.partitioned.PutMessage;
 import org.apache.geode.internal.logging.LogService;
 import org.apache.geode.test.awaitility.GeodeAwaitility;
 import org.apache.geode.test.dunit.AsyncInvocation;
@@ -71,9 +68,9 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
   public DistributedRestoreSystemProperties restoreSystemProperties =
       new DistributedRestoreSystemProperties();
 
-  private String regionName = "testRegion";
+  private final String regionName = "testRegion";
 
-  private final Integer ACK_WAIT_THRESHOLD = new Integer(2);
+  private final Integer ACK_WAIT_THRESHOLD = 2;
 
   @Before
   public void setUp() {
@@ -93,21 +90,21 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
 
       cacheRule.createCache();
-      createRegion(regionName, false);
+      createRegion();
       DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM0"));
     });
 
     vm1.invoke(() -> {
       cacheRule.createCache();
-      createRegion(regionName, false);
+      createRegion();
       DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM1"));
     });
 
-    AsyncInvocation vm0put = vm0.invokeAsync(() -> {
+    AsyncInvocation<Object> vm0put = vm0.invokeAsync(() -> {
       String oldName = Thread.currentThread().getName();
       try {
         Thread.currentThread().setName(oldName + " PUT THREAD ");
-        Region region = cacheRule.getCache().getRegion(regionName);
+        Region<Object, Object> region = cacheRule.getCache().getRegion(regionName);
         LogService.getLogger().info("#### adding data into region.");
         region.put("KEY-1", "VALUE-1");
       } finally {
@@ -141,30 +138,30 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
 
       cacheRule.createCache();
-      createRegion(regionName, false);
+      createRegion();
       DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM0"));
     });
 
-    int port = vm0.invoke(() -> startServer());
+    int port = vm0.invoke(this::startServer);
 
     vm1.invoke(() -> {
       System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
 
       cacheRule.createCache();
-      createRegion(regionName, false);
+      createRegion();
       DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM1"));
     });
 
-    AsyncInvocation vm2put = vm2.invokeAsync(() -> {
+    AsyncInvocation<Object> vm2put = vm2.invokeAsync(() -> {
       clientCacheRule.createClientCache();
-      createClientRegion(regionName, hostName, port);
-      Region region = clientCacheRule.getClientCache().getRegion(regionName);
+      createClientRegion(hostName, port);
+      Region<Object, Object> region = clientCacheRule.getClientCache().getRegion(regionName);
       LogService.getLogger().info("#### adding data into region.");
       region.put("KEY-1", "VALUE-1");
     });
 
-    AsyncInvocation vm0put = vm0.invokeAsync(() -> {
+    AsyncInvocation<Object> vm0put = vm0.invokeAsync(() -> {
       GeodeAwaitility.await().until(() ->
           getBlackboard().isGateSignaled("PutReceivedOnVM1") ||
               getBlackboard().isGateSignaled("PutReceivedOnVM0"));
@@ -176,7 +173,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
     });
 
-    AsyncInvocation vm1put = vm1.invokeAsync(() -> {
+    AsyncInvocation<Object> vm1put = vm1.invokeAsync(() -> {
       GeodeAwaitility.await().until(() ->
           getBlackboard().isGateSignaled("PutReceivedOnVM1") ||
               getBlackboard().isGateSignaled("PutReceivedOnVM0"));
@@ -207,7 +204,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
       System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
       cacheRule.createCache();
-      createRegion(regionName, false);
+      createRegion();
       DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM0"));
     });
 
@@ -216,15 +213,15 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
           DistributionConfig.CONSERVE_SOCKETS_NAME, "false");
 
       cacheRule.createCache();
-      createRegion(regionName, false);
+      createRegion();
       DistributionMessageObserver.setInstance(new ThreadMessageObserver("VM1"));
     });
 
-    AsyncInvocation vm0put = vm0.invokeAsync(() -> {
+    AsyncInvocation<Object> vm0put = vm0.invokeAsync(() -> {
       String oldName = Thread.currentThread().getName();
       try {
         Thread.currentThread().setName("#### PUT THREAD");
-        Region region = cacheRule.getCache().getRegion(regionName);
+        Region<Object, Object> region = cacheRule.getCache().getRegion(regionName);
         LogService.getLogger().info("#### adding data into region.");
         region.put("KEY-1", "VALUE-1");
       } finally {
@@ -249,20 +246,17 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
     return server.getPort();
   }
 
-  private void createRegion(String regionName, boolean addAsyncEventQueueId) {
-    RegionFactory rf = cacheRule.getCache().createRegionFactory(RegionShortcut.REPLICATE);
-    if (addAsyncEventQueueId) {
-      rf.addAsyncEventQueueId("aeqId");
-    }
-    rf.create(regionName);
+  private void createRegion() {
+    RegionFactory<Object, Object> rf = cacheRule.getCache().createRegionFactory(RegionShortcut.REPLICATE);
+    rf.create("testRegion");
   }
 
-  private void createClientRegion(String regionName, String hostName, int port) {
+  private void createClientRegion(String hostName, int port) {
     Pool pool = PoolManager.createFactory().addServer(hostName, port).create("clientPool");
 
-    ClientRegionFactory rf = clientCacheRule.getClientCache().createClientRegionFactory(
+    ClientRegionFactory<Object, Object> rf = clientCacheRule.getClientCache().createClientRegionFactory(
         ClientRegionShortcut.CACHING_PROXY);
-    rf.setPoolName(pool.getName()).create(regionName);
+    rf.setPoolName(pool.getName()).create("testRegion");
   }
 
   private void takeThreadDump() {
@@ -279,11 +273,11 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
         " Id=" + threadInfo.getThreadId() + " " +
         threadInfo.getThreadState());
     if (threadInfo.getLockName() != null) {
-      sb.append(" on " + threadInfo.getLockName());
+      sb.append(" on ").append(threadInfo.getLockName());
     }
     if (threadInfo.getLockOwnerName() != null) {
-      sb.append(" owned by \"" + threadInfo.getLockOwnerName() +
-          "\" Id=" + threadInfo.getLockOwnerId());
+      sb.append(" owned by \"").append(threadInfo.getLockOwnerName()).append("\" Id=")
+          .append(threadInfo.getLockOwnerId());
     }
     if (threadInfo.isSuspended()) {
       sb.append(" (suspended)");
@@ -296,21 +290,18 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
     StackTraceElement[] stackTrace = threadInfo.getStackTrace();
     for (; i < stackTrace.length; i++) {
       StackTraceElement ste = stackTrace[i];
-      sb.append("\tat " + ste.toString());
+      sb.append("\tat ").append(ste.toString());
       sb.append('\n');
       if (i == 0 && threadInfo.getLockInfo() != null) {
         Thread.State ts = threadInfo.getThreadState();
         switch (ts) {
           case BLOCKED:
-            sb.append("\t-  blocked on " + threadInfo.getLockInfo());
+            sb.append("\t-  blocked on ").append(threadInfo.getLockInfo());
             sb.append('\n');
             break;
           case WAITING:
-            sb.append("\t-  waiting on " + threadInfo.getLockInfo());
-            sb.append('\n');
-            break;
           case TIMED_WAITING:
-            sb.append("\t-  waiting on " + threadInfo.getLockInfo());
+            sb.append("\t-  waiting on ").append(threadInfo.getLockInfo());
             sb.append('\n');
             break;
           default:
@@ -319,7 +310,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
       for (MonitorInfo mi : threadInfo.getLockedMonitors()) {
         if (mi.getLockedStackDepth() == i) {
-          sb.append("\t-  locked " + mi);
+          sb.append("\t-  locked ").append(mi);
           sb.append('\n');
         }
       }
@@ -331,10 +322,10 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
     LockInfo[] locks = threadInfo.getLockedSynchronizers();
     if (locks.length > 0) {
-      sb.append("\n\tNumber of locked synchronizers = " + locks.length);
+      sb.append("\n\tNumber of locked synchronizers = ").append(locks.length);
       sb.append('\n');
       for (LockInfo li : locks) {
-        sb.append("\t- " + li);
+        sb.append("\t- ").append(li);
         sb.append('\n');
       }
     }
@@ -344,7 +335,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
   private class ThreadMessageObserver extends DistributionMessageObserver {
 
-    String vmName;
+    final String vmName;
 
     ThreadMessageObserver(String vmName) {
       this.vmName = vmName;
@@ -356,10 +347,10 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
       if (message instanceof UpdateOperation.UpdateMessage) {
         LogService.getLogger().info("#### Processing UpdateOperation.UpdateMessage");
         try {
-          Thread.sleep(ACK_WAIT_THRESHOLD.intValue() * 1000);
+          Thread.sleep(ACK_WAIT_THRESHOLD * 1000);
           getBlackboard().signalGate("PutReceivedOn" + vmName);
           getBlackboard().waitForGate("ThreadDumpTakenOn" + (vmName.equals("VM0") ? "VM1" : "VM0"), 30, SECONDS);
-        } catch (Exception ex) {
+        } catch (Exception ignore) {
         }
       }
     }
