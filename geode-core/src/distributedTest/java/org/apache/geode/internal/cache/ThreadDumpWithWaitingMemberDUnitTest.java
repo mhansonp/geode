@@ -44,7 +44,7 @@ import org.apache.geode.distributed.internal.ClusterDistributionManager;
 import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.distributed.internal.DistributionMessage;
 import org.apache.geode.distributed.internal.DistributionMessageObserver;
-import org.apache.geode.internal.logging.LogService;
+import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.test.awaitility.GeodeAwaitility;
 import org.apache.geode.test.dunit.AsyncInvocation;
 import org.apache.geode.test.dunit.VM;
@@ -52,6 +52,7 @@ import org.apache.geode.test.dunit.rules.CacheRule;
 import org.apache.geode.test.dunit.rules.ClientCacheRule;
 import org.apache.geode.test.dunit.rules.DistributedRestoreSystemProperties;
 import org.apache.geode.test.dunit.rules.DistributedRule;
+import org.apache.geode.util.internal.GeodeGlossary;
 
 public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
@@ -86,7 +87,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
     // Create region in one member
     vm0.invoke(() -> {
 
-      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+      System.setProperty(GeodeGlossary.GEMFIRE_PREFIX +
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
 
       cacheRule.createCache();
@@ -118,7 +119,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
       getBlackboard().signalGate("ThreadDumpTakenOnVM0");
     });
 
-    vm0put.join();
+    vm0put.await();
 
   }
 
@@ -134,7 +135,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
     // Create region in one member
     vm0.invoke(() -> {
-      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+      System.setProperty(GeodeGlossary.GEMFIRE_PREFIX +
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
 
       cacheRule.createCache();
@@ -145,7 +146,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
     int port = vm0.invoke(this::startServer);
 
     vm1.invoke(() -> {
-      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+      System.setProperty(GeodeGlossary.GEMFIRE_PREFIX +
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
 
       cacheRule.createCache();
@@ -184,9 +185,9 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
       }
     });
 
-    vm0put.join();
-    vm1put.join();
-    vm2put.join();
+    vm0put.await();
+    vm1put.await();
+    vm2put.await();
   }
 
   @Test
@@ -198,10 +199,10 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
 
     // Create region in one member
     vm0.invoke(() -> {
-      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+      System.setProperty(GeodeGlossary.GEMFIRE_PREFIX +
           DistributionConfig.CONSERVE_SOCKETS_NAME, "false");
 
-      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+      System.setProperty(GeodeGlossary.GEMFIRE_PREFIX +
           DistributionConfig.ACK_WAIT_THRESHOLD_NAME, ACK_WAIT_THRESHOLD.toString());
       cacheRule.createCache();
       createRegion();
@@ -209,7 +210,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
     });
 
     vm1.invoke(() -> {
-      System.setProperty(DistributionConfig.GEMFIRE_PREFIX +
+      System.setProperty(GeodeGlossary.GEMFIRE_PREFIX +
           DistributionConfig.CONSERVE_SOCKETS_NAME, "false");
 
       cacheRule.createCache();
@@ -235,7 +236,7 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
       getBlackboard().signalGate("ThreadDumpTakenOnVM0");
     });
 
-    vm0put.join();
+    vm0put.await();
 
   }
 
@@ -315,10 +316,10 @@ public class ThreadDumpWithWaitingMemberDUnitTest implements Serializable {
         }
       }
     }
-    if (i < stackTrace.length) {
-      sb.append("\t...");
-      sb.append('\n');
-    }
+//    if (i < stackTrace.length) {
+//      sb.append("\t...");
+//      sb.append('\n');
+//    }
 
     LockInfo[] locks = threadInfo.getLockedSynchronizers();
     if (locks.length > 0) {
