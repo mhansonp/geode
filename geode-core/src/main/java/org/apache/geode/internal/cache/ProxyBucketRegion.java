@@ -90,10 +90,10 @@ public class ProxyBucketRegion implements Bucket {
   public ProxyBucketRegion(int bid, PartitionedRegion partitionedRegion,
       InternalRegionArguments internalRegionArgs) {
     SelectiveLogger selectiveLogger = new SelectiveLogger();
-    selectiveLogger.setPrepend(() -> " This = " + this.getName() + " MLH ProxyBucketRegion ");
-    selectiveLogger
-        .log(" 1 entered bid  = " + bid + " partitionedRegion = " + partitionedRegion.getName()
-            + " internalRegionArgs = " + internalRegionArgs);
+    selectiveLogger.setPrepend(() -> " MLH ProxyBucketRegion ");
+    selectiveLogger.log(" 1 entered bid  = " + bid + " partitionedRegion = "
+        + partitionedRegion.getName()
+        + " internalRegionArgs = " + internalRegionArgs);
 
     this.serialNumber = DistributionAdvisor.createSerialNumber();
     this.bid = bid;

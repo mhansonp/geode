@@ -144,7 +144,7 @@ public class ManageBucketMessage extends PartitionMessage {
     // This is to ensure that initialization is complete before bucket creation request is
     // serviced. BUGFIX for 35888
     r.waitOnInitialization();
-
+    selectiveLogger.log("2 finished waiting on initialization");
     r.checkReadiness(); // Don't allow closed PartitionedRegions that have datastores to host
                         // buckets
     PartitionedRegionDataStore prDs = r.getDataStore();
@@ -157,11 +157,13 @@ public class ManageBucketMessage extends PartitionMessage {
       // make copies of this bucket. Normally the sender would be responsible
       // for creating those copies.
       checkSenderStillAlive(r, getSender());
-
+      selectiveLogger.log("3 sendAcceptance").print();
       ManageBucketReplyMessage.sendAcceptance(getSender(), getProcessorId(), dm);
     } else {
+      selectiveLogger.log("4 sendRefusal").print();
       ManageBucketReplyMessage.sendRefusal(getSender(), getProcessorId(), dm);
     }
+    selectiveLogger.log("5 finished").print();
     return false;
   }
 
