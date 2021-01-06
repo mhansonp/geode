@@ -711,15 +711,15 @@ public class PRHARedundancyProvider {
           // buckets created concurrently with this createBucketAtomically call
           acceptedMembers = partitionedRegion.getRegionAdvisor().getBucketOwners(bucketId);
 
-          if (isDebugEnabled) {
-            logger.debug("Accepted members: {}", acceptedMembers);
-          }
+
+          selectiveLogger.log("Accepted members: " + acceptedMembers);
 
           // set the primary as the candidate in the first iteration if the candidate has accepted
           if (bucketPrimary == null && acceptedMembers.contains(candidate)) {
             bucketPrimary = candidate;
           }
-          selectiveLogger.log(" 9 bucketPrimary = " + bucketPrimary);
+          selectiveLogger.log(
+              " 9 bucketPrimary = " + bucketPrimary + " is not equal to candidate " + candidate);
 
           // prune out the stores that have left
           verifyBucketNodes(excludedMembers, partitionName);
@@ -991,11 +991,11 @@ public class PRHARedundancyProvider {
 
         // If the bucket has had a primary, that means the chosen bucket was primary for a while.
         // Go ahead and clear the primary elector field.
-        if (bucketAdvisor.getHadPrimary()) {
-          selectiveLogger.log(" 6 volunteering for primary" + newPrimary);
-          bucketAdvisor.clearPrimaryElector();
-          bucketAdvisor.volunteerForPrimary();
-        }
+        // if (bucketAdvisor.getHadPrimary()) {
+        // selectiveLogger.log(" 6 volunteering for primary" + newPrimary);
+        // bucketAdvisor.clearPrimaryElector();
+        // bucketAdvisor.volunteerForPrimary();
+        // }
       }
     }
 
@@ -1529,6 +1529,7 @@ public class PRHARedundancyProvider {
    * redundancy of existing buckets
    */
   void startRedundancyRecovery() {
+    logger.info("MLH startRedundancyRecovery entered");
     partitionedRegion.getRegionAdvisor().addMembershipListener(new PRMembershipListener());
     scheduleRedundancyRecovery(null);
   }
@@ -1585,6 +1586,11 @@ public class PRHARedundancyProvider {
    */
   private void verifyBucketNodes(Collection<InternalDistributedMember> members,
       String partitionName) {
+
+    SelectiveLogger selectiveLogger = new SelectiveLogger();
+    selectiveLogger.setPrepend(() -> "partitionName = " + partitionName + " MLH verifyBucketNodes");
+    selectiveLogger.log(" 1 entered members = " + members + " partitionName = " + partitionName);
+
     if (members == null || members.isEmpty()) {
       return;
     }
@@ -1595,9 +1601,7 @@ public class PRHARedundancyProvider {
     for (Iterator<InternalDistributedMember> iterator = members.iterator(); iterator.hasNext();) {
       InternalDistributedMember node = iterator.next();
       if (!availableMembers.contains(node)) {
-        if (logger.isDebugEnabled()) {
-          logger.debug("verifyBucketNodes: removing member {}", node);
-        }
+        selectiveLogger.log("verifyBucketNodes: removing member " + node);
         iterator.remove();
         Assert.assertTrue(!members.contains(node), "return value does not contain " + node);
       }
@@ -1611,7 +1615,7 @@ public class PRHARedundancyProvider {
     boolean isStartup = failedMemberId == null;
     long delay;
     boolean movePrimaries;
-
+    logger.info("MLH scheduleRedundancyRecovery 1 for failedMemberId = " + failedMemberId);
     if (isStartup) {
       delay = partitionedRegion.getPartitionAttributes().getStartupRecoveryDelay();
       movePrimaries = !Boolean
@@ -1635,6 +1639,7 @@ public class PRHARedundancyProvider {
       public void run2() {
         try {
           boolean isFixedPartitionedRegion = partitionedRegion.isFixedPartitionedRegion();
+          logger.info("MLH scheduleRedundancyRecovery:RecoveryRunnable  1 running");
 
           // always replace offline data for fixed partitioned regions -
           // this guarantees we create the buckets we are supposed to create on this node.
@@ -1646,26 +1651,30 @@ public class PRHARedundancyProvider {
           } else {
             director = new CompositeDirector(true, true, false, movePrimaries);
           }
+          logger.info("MLH scheduleRedundancyRecovery:RecoveryRunnable 2 director = " + director);
 
           PartitionedRegionRebalanceOp rebalance = rebalanceOpFactory.create(
               partitionedRegion, false, director, replaceOfflineData, false);
+          logger.info("MLH scheduleRedundancyRecovery:RecoveryRunnable 3 rebalance = " + rebalance);
 
           long start = partitionedRegion.getPrStats().startRecovery();
+          logger.info("MLH scheduleRedundancyRecovery:RecoveryRunnable 3 rebalancing");
 
           if (isFixedPartitionedRegion) {
             rebalance.executeFPA();
           } else {
             rebalance.execute();
           }
+          logger.info("MLH scheduleRedundancyRecovery:RecoveryRunnable finished");
 
           partitionedRegion.getPrStats().endRecovery(start);
           recoveryFuture = null;
           providerStartupTask.complete(null);
         } catch (CancelException e) {
-          logger.debug("Cache closed while recovery in progress");
+          logger.info("Cache closed while recovery in progress");
           providerStartupTask.completeExceptionally(e);
         } catch (RegionDestroyedException e) {
-          logger.debug("Region destroyed while recovery in progress");
+          logger.info("Region destroyed while recovery in progress");
           providerStartupTask.completeExceptionally(e);
         } catch (Exception e) {
           logger.error("Unexpected exception during bucket recovery", e);

@@ -147,23 +147,31 @@ public class ManageBucketMessage extends PartitionMessage {
     selectiveLogger.log("2 finished waiting on initialization");
     r.checkReadiness(); // Don't allow closed PartitionedRegions that have datastores to host
                         // buckets
+    selectiveLogger.log("3 checkReadiness").print();
+
     PartitionedRegionDataStore prDs = r.getDataStore();
+    selectiveLogger.log("4 getDataStore").print();
+
     boolean managingBucket = prDs.handleManageBucketRequest(this.bucketId, this.bucketSize,
         this.sender, this.forceCreation);
+    selectiveLogger.log("5 handleManageBucketRequest").print();
+
     r.getPrStats().endPartitionMessagesProcessing(startTime);
+    selectiveLogger.log("6 endPartitionMessagesProcessing").print();
+
     if (managingBucket) {
       // fix for bug 39356 - If the sender died while we were creating the bucket
       // notify other nodes that they should invoke grabBackupBuckets to
       // make copies of this bucket. Normally the sender would be responsible
       // for creating those copies.
       checkSenderStillAlive(r, getSender());
-      selectiveLogger.log("3 sendAcceptance").print();
+      selectiveLogger.log("7 sendAcceptance").print();
       ManageBucketReplyMessage.sendAcceptance(getSender(), getProcessorId(), dm);
     } else {
-      selectiveLogger.log("4 sendRefusal").print();
+      selectiveLogger.log("8 sendRefusal").print();
       ManageBucketReplyMessage.sendRefusal(getSender(), getProcessorId(), dm);
     }
-    selectiveLogger.log("5 finished").print();
+    selectiveLogger.log("9 finished").print();
     return false;
   }
 

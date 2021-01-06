@@ -342,17 +342,24 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
   }
 
   private void deposeOtherPrimaryBucketForFixedPartition() {
+    logger.info("MLH deposeOtherPrimaryBucketForFixedPartition 1");
     boolean deposedOtherPrimaries = true;
     int bucketId = getBucket().getId();
     List<FixedPartitionAttributesImpl> fixedPartitionAttributes =
         pRegion.getFixedPartitionAttributesImpl();
+    logger.info("MLH deposeOtherPrimaryBucketForFixedPartition 2");
+
     if (fixedPartitionAttributes != null) {
       for (FixedPartitionAttributesImpl fpa : fixedPartitionAttributes) {
         if (fpa.getStartingBucketID() == bucketId) {
           for (int i = (bucketId + 1); i <= fpa.getLastBucketID(); i++) {
             Bucket b = regionAdvisor.getBucket(i);
             if (b != null) {
+
               BucketAdvisor ba = b.getBucketAdvisor();
+              logger.info(
+                  "MLH deposeOtherPrimaryBucketForFixedPartition 3 deposing primary for bucketId = "
+                      + bucketId + "ba = " + ba);
               deposedOtherPrimaries = ba.deposePrimary() && deposedOtherPrimaries;
             }
           }
@@ -1617,20 +1624,24 @@ public class BucketAdvisor extends CacheDistributionAdvisor {
 
   synchronized void setPrimaryElector(InternalDistributedMember newPrimaryElector) {
     SelectiveLogger logger = new SelectiveLogger();
-    logger.setPrepend(() -> " MLH setPrimaryElector bucketAdvisor = " + this + "primary elector"
-        + primaryElector);
+    logger.setPrepend(() -> " MLH setPrimaryElector ");
+    logger.log("1 bucketAdvisor = " + this + " primary elector = "
+        + primaryElector + " new primary elector = " + newPrimaryElector);
     // Only set the new primary elector if we have not yet seen
     // a primary for this bucket.
     if (primaryElector != null) {
+      logger.log("2 primaryElector was null");
       if (newPrimaryElector != null && !regionAdvisor.hasPartitionedRegion(newPrimaryElector)) {
         // no longer a participant - don't use it
+        logger.log("3 no longer a participant - don't use it");
         primaryElector = null;
       } else {
+        logger.log("4 setting primaryElector " + primaryElector + " to newPrimaryElector "
+            + newPrimaryElector);
         primaryElector = newPrimaryElector;
       }
     }
-    logger.log(" primary elector =  " + primaryElector).print();
-
+    logger.log("5 primary elector =  " + primaryElector).print();
   }
 
 

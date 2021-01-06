@@ -1006,22 +1006,19 @@ public class PartitionedRegionDataStore implements HasCachePerfStats {
 
     // check maxMemory setting
     if (!this.partitionedRegion.isDataStore()) {
-      if (logger.isDebugEnabled()) {
-        logger.debug("handleRemoteManageBucket: local max memory is zero");
-      }
+      logger.info("handleRemoteManageBucket: local max memory is zero");
       return false;
     }
     if (!forceCreation && !canAccommodateMoreBytesSafely(size)) {
-      if (logger.isDebugEnabled()) {
-        logger.debug(
-            "Partitioned Region {} has exceeded local maximum memory configuration {} Mb, current size is {} Mb",
-            this.partitionedRegion.getFullPath(), this.partitionedRegion.getLocalMaxMemory(),
-            (this.bytesInUse.get() / PartitionedRegionHelper.BYTES_PER_MB));
+      logger.info(
+          "Partitioned Region {} has exceeded local maximum memory configuration {} Mb, current size is {} Mb",
+          this.partitionedRegion.getFullPath(), this.partitionedRegion.getLocalMaxMemory(),
+          (this.bytesInUse.get() / PartitionedRegionHelper.BYTES_PER_MB));
 
-        logger.debug("Refusing remote bucket creation request for bucketId={}{}{} of size {} Mb.",
-            this.partitionedRegion.getPRId(), PartitionedRegion.BUCKET_ID_SEPARATOR, bucketId,
-            (size / PartitionedRegionHelper.BYTES_PER_MB));
-      }
+      logger.info("Refusing remote bucket creation request for bucketId={}{}{} of size {} Mb.",
+          this.partitionedRegion.getPRId(), PartitionedRegion.BUCKET_ID_SEPARATOR, bucketId,
+          (size / PartitionedRegionHelper.BYTES_PER_MB));
+
       return false;
     }
 
@@ -1032,18 +1029,14 @@ public class PartitionedRegionDataStore implements HasCachePerfStats {
     boolean createdBucket = false;
     if (grabBucket(bucketId, null, forceCreation, false, true, sender, false).nowExists()) {
       this.partitionedRegion.checkReadiness();
-      if (logger.isDebugEnabled()) {
-        logger.debug(
-            "handleManageBucketRequest: successful, returning:{} bucketId={}{}{} for PR = {}",
-            this.partitionedRegion.getMyId(), this.partitionedRegion.getPRId(),
-            PartitionedRegion.BUCKET_ID_SEPARATOR, bucketId, this.getName());
-      }
+      logger.info(
+          "handleManageBucketRequest: successful, returning:{} bucketId={}{}{} for PR = {}",
+          this.partitionedRegion.getMyId(), this.partitionedRegion.getPRId(),
+          PartitionedRegion.BUCKET_ID_SEPARATOR, bucketId, this.getName());
       createdBucket = true;
     } else {
       // somebody else got it already
-      if (logger.isDebugEnabled()) {
-        logger.debug("handleManageBucketRequest: someone else grabbed this bucket");
-      }
+      logger.info("handleManageBucketRequest: someone else grabbed this bucket");
     }
 
     return createdBucket;
