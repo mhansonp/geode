@@ -232,9 +232,7 @@ public class SerialGatewaySenderQueue implements RegionQueue {
     this.removalThread = new BatchRemovalThread(abstractSender.getCache());
     this.removalThread.start();
     this.sender = abstractSender;
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Contains {} elements", this, size());
-    }
+    logger.debug("{}: Contains {} elements", this, size());
   }
 
   @Override
@@ -273,9 +271,7 @@ public class SerialGatewaySenderQueue implements RegionQueue {
     // signal that a new object is available.
     incrementTailKey();
 
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Inserted {} -> {}", this, key, object);
-    }
+    logger.debug("{}: Inserted {} -> {}", this, key, object);
     if (object instanceof Conflatable) {
       removeOldEntry((Conflatable) object, key);
     }
@@ -326,11 +322,9 @@ public class SerialGatewaySenderQueue implements RegionQueue {
     } catch (EntryNotFoundException ok) {
       // this is acceptable because the conflation can remove entries
       // out from underneath us.
-      if (logger.isDebugEnabled()) {
-        logger.debug(
-            "{}: Did not destroy entry at {} it was not there. It should have been removed by conflation.",
-            this, key);
-      }
+      logger.debug(
+          "{}: Did not destroy entry at {} it was not there. It should have been removed by conflation.",
+          this, key);
     }
 
     boolean wasEmpty = this.lastDispatchedKey == this.lastDestroyedKey;
@@ -360,11 +354,9 @@ public class SerialGatewaySenderQueue implements RegionQueue {
       }
     }
 
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "{}: Destroyed entry at key {} setting the lastDispatched Key to {}. The last destroyed entry was {}",
-          this, key, this.lastDispatchedKey, this.lastDestroyedKey);
-    }
+    logger.debug(
+        "{}: Destroyed entry at key {} setting the lastDispatched Key to {}. The last destroyed entry was {}",
+        this, key, this.lastDispatchedKey, this.lastDestroyedKey);
   }
 
   /**
@@ -484,11 +476,9 @@ public class SerialGatewaySenderQueue implements RegionQueue {
           batch.add(event);
           areAllEventsForTransactionInBatch = event.isLastEventInTransaction();
 
-          if (logger.isDebugEnabled()) {
-            logger.debug(
-                "Peeking extra event: {}, isLastEventInTransaction: {}, batch size: {}",
-                event.getKey(), event.isLastEventInTransaction(), batch.size());
-          }
+          logger.debug(
+              "Peeking extra event: {}, isLastEventInTransaction: {}, batch size: {}",
+              event.getKey(), event.isLastEventInTransaction(), batch.size());
         }
         lastKeyForTransaction = eventsAndKey.lastKey;
       }
@@ -689,10 +679,8 @@ public class SerialGatewaySenderQueue implements RegionQueue {
             if (index != null) {
               this.stats.decConflationIndexesMapSize();
             }
-            if (logger.isDebugEnabled()) {
-              if (index != null) {
-                logger.debug("{}: Removed index {} for {}", this, index, object);
-              }
+            if (index != null) {
+              logger.debug("{}: Removed index {} for {}", this, index, object);
             }
           }
         }
@@ -815,9 +803,7 @@ public class SerialGatewaySenderQueue implements RegionQueue {
       }
     }
 
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Peeked {}->{}", this, currentKey, object);
-    }
+    logger.debug("{}: Peeked {}->{}", this, currentKey, object);
 
     if (object != null) {
       peekedIds.add(currentKey);
@@ -975,10 +961,8 @@ public class SerialGatewaySenderQueue implements RegionQueue {
         this.tailKey.set(inc(largestKey));
       }
 
-      if (logger.isDebugEnabled()) {
-        logger.debug("{}: Initialized tail key to: {}, head key to: {}", this, this.tailKey,
-            this.headKey);
-      }
+      logger.debug("{}: Initialized tail key to: {}, head key to: {}", this, this.tailKey,
+          this.headKey);
     }
   }
 
@@ -1044,10 +1028,8 @@ public class SerialGatewaySenderQueue implements RegionQueue {
       if (NO_ACK) {
         factory.setScope(Scope.DISTRIBUTED_NO_ACK);
       }
-      if (logger.isDebugEnabled()) {
-        logger.debug("The policy of region is {}",
-            (this.enablePersistence ? DataPolicy.PERSISTENT_REPLICATE : DataPolicy.REPLICATE));
-      }
+      logger.debug("The policy of region is {}",
+          (this.enablePersistence ? DataPolicy.PERSISTENT_REPLICATE : DataPolicy.REPLICATE));
       // Set listener if it is not null. The listener will be non-null
       // when the user of this queue is a secondary VM.
       if (listener != null) {
@@ -1066,9 +1048,7 @@ public class SerialGatewaySenderQueue implements RegionQueue {
       factory.setDiskSynchronous(this.isDiskSynchronous);
 
       // Create the region
-      if (logger.isDebugEnabled()) {
-        logger.debug("{}: Attempting to create queue region: {}", this, this.regionName);
-      }
+      logger.debug("{}: Attempting to create queue region: {}", this, this.regionName);
       final RegionAttributes<Long, AsyncEvent> ra = factory.getCreateAttributes();
       try {
         SerialGatewaySenderQueueMetaRegion meta =
@@ -1085,9 +1065,7 @@ public class SerialGatewaySenderQueue implements RegionQueue {
         // Add overflow statistics to the mbean
         addOverflowStatisticsToMBean(gemCache, sender);
 
-        if (logger.isDebugEnabled()) {
-          logger.debug("{}: Created queue region: {}", this, this.region);
-        }
+        logger.debug("{}: Created queue region: {}", this, this.region);
       } catch (CacheException e) {
         logger.fatal(String.format("%s: The queue region named %s could not be created",
             new Object[] {this, this.regionName}),
@@ -1217,10 +1195,8 @@ public class SerialGatewaySenderQueue implements RegionQueue {
                 Thread.currentThread().interrupt();
             }
 
-            if (logger.isDebugEnabled()) {
-              logger.debug("BatchRemovalThread about to send the last Dispatched key {}",
-                  lastDispatchedKey);
-            }
+            logger.debug("BatchRemovalThread about to send the last Dispatched key {}",
+                lastDispatchedKey);
 
             long temp;
             synchronized (SerialGatewaySenderQueue.this) {
@@ -1241,17 +1217,13 @@ public class SerialGatewaySenderQueue implements RegionQueue {
 
             BatchDestroyOperation op = new BatchDestroyOperation(event);
             op.distribute();
-            if (logger.isDebugEnabled()) {
-              logger.debug("BatchRemovalThread completed destroy of keys from {} to {}",
-                  lastDestroyedKey, temp);
-            }
+            logger.debug("BatchRemovalThread completed destroy of keys from {} to {}",
+                lastDestroyedKey, temp);
             lastDestroyedKey = temp;
 
           } // be somewhat tolerant of failures
           catch (CancelException e) {
-            if (logger.isDebugEnabled()) {
-              logger.debug("BatchRemovalThread is exiting due to cancellation");
-            }
+            logger.debug("BatchRemovalThread is exiting due to cancellation");
             break;
           } catch (VirtualMachineError err) {
             SystemFailure.initiateFailure(err);
@@ -1268,16 +1240,12 @@ public class SerialGatewaySenderQueue implements RegionQueue {
             if (checkCancelled()) {
               break;
             }
-            if (logger.isDebugEnabled()) {
-              logger.debug("BatchRemovalThread: ignoring exception", t);
-            }
+            logger.debug("BatchRemovalThread: ignoring exception", t);
           }
         } // for
       } // ensure exit message is printed
       catch (CancelException e) {
-        if (logger.isDebugEnabled()) {
-          logger.debug("BatchRemovalThread exiting due to cancellation: " + e);
-        }
+        logger.debug("BatchRemovalThread exiting due to cancellation: " + e);
       } finally {
         logger.info("The QueueRemovalThread is done.");
       }

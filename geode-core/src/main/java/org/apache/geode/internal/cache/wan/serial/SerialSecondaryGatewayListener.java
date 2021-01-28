@@ -84,10 +84,8 @@ public class SerialSecondaryGatewayListener extends CacheListenerAdapter {
     Object oldValue = event.getOldValue();
     if (oldValue instanceof GatewaySenderEventImpl) {
       GatewaySenderEventImpl senderEvent = (GatewaySenderEventImpl) oldValue;
-      if (logger.isDebugEnabled()) {
-        logger.debug("Received after Destroy for Secondary event {} the key was {}", senderEvent,
-            event.getKey());
-      }
+      logger.debug("Received after Destroy for Secondary event {} the key was {}", senderEvent,
+          event.getKey());
       this.processor.handlePrimaryDestroy(senderEvent);
     }
   }

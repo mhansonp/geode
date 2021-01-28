@@ -331,6 +331,7 @@ public abstract class DistributedCacheOperation {
     DistributedRegion region = getRegion();
     DistributionManager mgr = region.getDistributionManager();
     boolean reliableOp = isOperationReliable() && region.requiresReliabilityCheck();
+    boolean isDebugEnabled = logger.isDebugEnabled();
 
     if (SLOW_DISTRIBUTION_MS > 0) { // test hook
       try {
@@ -365,7 +366,7 @@ public abstract class DistributedCacheOperation {
         routingComputed = true;
         filterRouting = getRecipientFilterRouting(recipients);
         if (filterRouting != null) {
-          if (logger.isDebugEnabled()) {
+          if (isDebugEnabled) {
             logger.debug("Computed this filter routing: {}", filterRouting);
           }
         }
@@ -472,7 +473,7 @@ public abstract class DistributedCacheOperation {
           }
         }
 
-        if (logger.isDebugEnabled()) {
+        if (isDebugEnabled) {
           logger.debug("recipients for {}: {} with adjunct messages to: {}", this, recipients,
               adjunctRecipients);
         }
@@ -485,10 +486,20 @@ public abstract class DistributedCacheOperation {
                                                                                                     // common
                                                                                                     // case
             waitForMembers = recipients;
+            if (isDebugEnabled) {
+              logger.debug("MLH _distribute 1 this : " + this + " recipients " + recipients);
+            }
+
           } else if (!cachelessNodes.isEmpty()) {
             waitForMembers = new HashSet(recipients);
             waitForMembers.addAll(cachelessNodes);
+            if (isDebugEnabled) {
+              logger.debug("MLH _distribute 2 this : " + this + " recipients " + recipients);
+            }
           } else {
+            if (isDebugEnabled) {
+              logger.debug("MLH _distribute 3 this : " + this + " recipients " + recipients);
+            }
             // note that we use a Vector instead of a Set for the responders
             // collection
             // because partitioned regions sometimes send both a regular cache
@@ -504,7 +515,7 @@ public abstract class DistributedCacheOperation {
               LOSS_SIMULATION_GENERATOR = new Random(this.hashCode());
             }
             if ((LOSS_SIMULATION_GENERATOR.nextInt(100) * 1.0 / 100.0) < LOSS_SIMULATION_RATIO) {
-              if (logger.isDebugEnabled()) {
+              if (isDebugEnabled) {
                 logger.debug("loss simulation is inhibiting message transmission to {}",
                     recipients);
               }
@@ -513,6 +524,9 @@ public abstract class DistributedCacheOperation {
             }
           }
           if (reliableOp) {
+            if (isDebugEnabled) {
+              logger.debug("MLH _distribute 4 reliableOp : " + reliableOp);
+            }
             this.departedMembers = new HashSet();
             this.processor = new ReliableCacheReplyProcessor(region.getSystem(), waitForMembers,
                 this.departedMembers);
@@ -520,7 +534,9 @@ public abstract class DistributedCacheOperation {
             this.processor = new CacheOperationReplyProcessor(region.getSystem(), waitForMembers);
           }
         }
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 5 ");
+        }
         Set failures = null;
         CacheOperationMessage msg = createMessage();
         initMessage(msg, this.processor);
@@ -528,7 +544,9 @@ public abstract class DistributedCacheOperation {
         if (DistributedCacheOperation.internalBeforePutOutgoing != null) {
           DistributedCacheOperation.internalBeforePutOutgoing.run();
         }
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 6 ");
+        }
         if (processor != null && msg.isSevereAlertCompatible()) {
           this.processor.enableSevereAlertProcessing();
           // if this message is distributing for a partitioned region message,
@@ -545,7 +563,9 @@ public abstract class DistributedCacheOperation {
             }
           }
         }
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 7 ");
+        }
         msg.setMulticast(useMulticast);
         msg.directAck = directAck;
         if (region.isUsedForPartitionedRegionBucket()) {
@@ -559,7 +579,9 @@ public abstract class DistributedCacheOperation {
         } else if (!routingComputed) {
           msg.needsRouting = true;
         }
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 8 ");
+        }
         initProcessor(processor, msg);
 
         if (region.cache.isClosed() && !canBeSentDuringShutdown()) {
@@ -567,7 +589,9 @@ public abstract class DistributedCacheOperation {
               "The cache has been closed",
               null);
         }
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 9 ");
+        }
         msg.setRecipients(recipients);
         failures = mgr.putOutgoing(msg);
 
@@ -578,7 +602,7 @@ public abstract class DistributedCacheOperation {
           msg.setRecipients(needsOldValueInCacheOp);
           Set newFailures = mgr.putOutgoing(msg);
           if (newFailures != null) {
-            if (logger.isDebugEnabled()) {
+            if (isDebugEnabled) {
               logger.debug("Failed sending ({}) to {}", msg, newFailures);
             }
             if (failures != null && failures.size() > 0) {
@@ -588,7 +612,9 @@ public abstract class DistributedCacheOperation {
             }
           }
         }
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 10 ");
+        }
         if (cachelessNodes.size() > 0) {
           cachelessNodes.removeAll(cachelessNodesWithNoCacheServer);
           if (cachelessNodes.size() > 0) {
@@ -622,8 +648,10 @@ public abstract class DistributedCacheOperation {
             cachelessNodes.addAll(cachelessNodesWithNoCacheServer);
           }
         }
-
-        if (failures != null && !failures.isEmpty() && logger.isDebugEnabled()) {
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 11 ");
+        }
+        if (failures != null && !failures.isEmpty() && isDebugEnabled) {
           logger.debug("Failed sending ({}) to {} while processing event:{}", msg, failures, event);
         }
 
@@ -666,7 +694,9 @@ public abstract class DistributedCacheOperation {
             }
           }
         }
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 12 ");
+        }
         // compute local client routing before waiting for an ack only for a bucket
         if (region.isUsedForPartitionedRegionBucket()) {
           FilterInfo filterInfo = getLocalFilterRouting(filterRouting);
@@ -674,7 +704,9 @@ public abstract class DistributedCacheOperation {
         }
 
         waitForAckIfNeeded(msg, persistentIds);
-
+        if (isDebugEnabled) {
+          logger.debug("MLH _distribute 13 ");
+        }
         if (/* msg != null && */reliableOp) {
           Set successfulRecips = new HashSet(recipients);
           successfulRecips.addAll(cachelessNodes);
@@ -688,13 +720,15 @@ public abstract class DistributedCacheOperation {
           region.handleReliableDistribution(successfulRecips);
         }
       }
-
+      if (isDebugEnabled) {
+        logger.debug("MLH _distribute 14 ");
+      }
       if (region.isUsedForPartitionedRegionBucket() && filterRouting != null) {
         removeDestroyTokensFromCqResultKeys(filterRouting);
       }
 
     } catch (CancelException e) {
-      if (logger.isDebugEnabled()) {
+      if (isDebugEnabled) {
         logger.debug("distribution of message aborted by shutdown: {}", this);
       }
       throw e;
@@ -703,6 +737,9 @@ public abstract class DistributedCacheOperation {
           e);
       throw e;
     } finally {
+      if (isDebugEnabled) {
+        logger.debug("MLH _distribute 15 ");
+      }
       ReplyProcessor21.setShortSevereAlertProcessing(false);
     }
   }
@@ -1605,19 +1642,30 @@ public abstract class DistributedCacheOperation {
 
     @Override
     protected void process(final DistributionMessage dmsg, boolean warn) {
+      logger.info("MLH CacheOperationReplyProcessor.process 1 dmsg " + dmsg + " msg = " + msg);
       if (dmsg instanceof ReplyMessage) {
+        logger.info("MLH CacheOperationReplyProcessor.process 2");
+
         ReplyMessage replyMessage = (ReplyMessage) dmsg;
         if (msg != null) {
+          logger.info("MLH CacheOperationReplyProcessor.process 3 replyMessage " + replyMessage);
+
           boolean discard = !msg.processReply(replyMessage, this);
+          logger.info("MLH CacheOperationReplyProcessor.process 4 discard = " + discard);
           if (discard) {
+            logger.info("MLH CacheOperationReplyProcessor.process 5 discarding replyMessage = " + replyMessage);
             return;
           }
         }
+        logger.info("MLH CacheOperationReplyProcessor.process 5 ");
+
         if (replyMessage.getClosed()) {
+          logger.info("MLH CacheOperationReplyProcessor.process 6 ");
+
           closedMembers.add(replyMessage.getSender());
         }
       }
-
+      logger.info("MLH CacheOperationReplyProcessor.process 7 invoking super " + super.getClass().getName());
       super.process(dmsg, warn);
     }
 

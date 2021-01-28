@@ -74,9 +74,7 @@ public class ParallelGatewaySenderEventProcessor extends AbstractGatewaySenderEv
         targetRs.add(region);
       }
     }
-    if (logger.isDebugEnabled()) {
-      logger.debug("The target Regions are(PGSEP) {}", targetRs);
-    }
+    logger.debug("The target Regions are(PGSEP) {}", targetRs);
 
     ParallelGatewaySenderQueue queue;
     queue = new ParallelGatewaySenderQueue(this.sender, targetRs, this.index, this.nDispatcher,
@@ -108,11 +106,9 @@ public class ParallelGatewaySenderEventProcessor extends AbstractGatewaySenderEv
       // If it is the case then the event must be coming from notificationOnly message.
       // Don't enqueue the event and return from here only.
       // Fix for #49081 and EntryDestroyedException in #49367.
-      if (logger.isDebugEnabled()) {
-        logger.debug(
-            "ParallelGatewaySenderEventProcessor not enqueing the following event since tailKey is not set. {}",
-            event);
-      }
+      logger.debug(
+          "ParallelGatewaySenderEventProcessor not enqueing the following event since tailKey is not set. {}",
+          event);
       return;
     }
 
@@ -141,9 +137,7 @@ public class ParallelGatewaySenderEventProcessor extends AbstractGatewaySenderEv
         }
         getSender().getStatistics().endPut(start);
       } else {
-        if (logger.isDebugEnabled()) {
-          logger.debug("The Event {} is filtered.", gatewayQueueEvent);
-        }
+        logger.debug("The Event {} is filtered.", gatewayQueueEvent);
         getSender().getStatistics().incEventsFiltered();
       }
     } finally {
@@ -207,9 +201,7 @@ public class ParallelGatewaySenderEventProcessor extends AbstractGatewaySenderEv
 
   @Override
   public void initializeEventDispatcher() {
-    if (logger.isDebugEnabled()) {
-      logger.debug(" Creating the GatewayEventCallbackDispatcher");
-    }
+    logger.debug(" Creating the GatewayEventCallbackDispatcher");
     this.dispatcher = new GatewaySenderEventCallbackDispatcher(this);
   }
 }

@@ -68,12 +68,10 @@ public class GatewaySenderQueueEntrySynchronizationOperation {
   }
 
   protected void synchronizeEntries() {
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "{}: Requesting synchronization from member={}; regionPath={}; entriesToSynchronize={}",
-          getClass().getSimpleName(), this.recipient, this.region.getFullPath(),
-          this.entriesToSynchronize);
-    }
+    logger.debug(
+        "{}: Requesting synchronization from member={}; regionPath={}; entriesToSynchronize={}",
+        getClass().getSimpleName(), this.recipient, this.region.getFullPath(),
+        this.entriesToSynchronize);
     // Create and send message
     DistributionManager dm = this.region.getDistributionManager();
     GatewaySenderQueueEntrySynchronizationReplyProcessor processor =
@@ -125,13 +123,11 @@ public class GatewaySenderQueueEntrySynchronizationOperation {
         if (msg instanceof ReplyMessage) {
           ReplyMessage reply = (ReplyMessage) msg;
           if (reply.getException() == null) {
-            if (logger.isDebugEnabled()) {
-              logger.debug(
-                  "{}: Processing reply from member={}; regionPath={}; key={}; entriesToSynchronize={}",
-                  getClass().getSimpleName(), reply.getSender(),
-                  this.operation.region.getFullPath(), this.operation.entriesToSynchronize,
-                  reply.getReturnValue());
-            }
+            logger.debug(
+                "{}: Processing reply from member={}; regionPath={}; key={}; entriesToSynchronize={}",
+                getClass().getSimpleName(), reply.getSender(),
+                this.operation.region.getFullPath(), this.operation.entriesToSynchronize,
+                reply.getReturnValue());
             List<Map<String, GatewayQueueEvent>> events =
                 (List<Map<String, GatewayQueueEvent>>) reply.getReturnValue();
             for (int i = 0; i < events.size(); i++) {
@@ -194,10 +190,8 @@ public class GatewaySenderQueueEntrySynchronizationOperation {
       Object result = null;
       ReplyException replyException = null;
       try {
-        if (logger.isDebugEnabled()) {
-          logger.debug("{}: Providing synchronization region={}; entriesToSynchronize={}",
-              getClass().getSimpleName(), this.regionPath, this.entriesToSynchronize);
-        }
+        logger.debug("{}: Providing synchronization region={}; entriesToSynchronize={}",
+            getClass().getSimpleName(), this.regionPath, this.entriesToSynchronize);
         result = getSynchronizationEvents(dm.getCache());
       } catch (Throwable t) {
         replyException = new ReplyException(t);
@@ -210,10 +204,8 @@ public class GatewaySenderQueueEntrySynchronizationOperation {
         } else {
           replyMsg.setException(replyException);
         }
-        if (logger.isDebugEnabled()) {
-          logger.debug("{}: Sending synchronization reply returnValue={}; exception={}",
-              getClass().getSimpleName(), replyMsg.getReturnValue(), replyMsg.getException());
-        }
+        logger.debug("{}: Sending synchronization reply returnValue={}; exception={}",
+            getClass().getSimpleName(), replyMsg.getReturnValue(), replyMsg.getException());
         dm.putOutgoing(replyMsg);
       }
     }

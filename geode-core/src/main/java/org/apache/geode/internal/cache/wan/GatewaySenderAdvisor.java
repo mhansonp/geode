@@ -27,7 +27,9 @@ import java.util.TreeSet;
 import org.apache.logging.log4j.Logger;
 
 import org.apache.geode.CancelException;
+import org.apache.geode.ComponentStatus;
 import org.apache.geode.DataSerializer;
+import org.apache.geode.StatusReporter;
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.cache.asyncqueue.AsyncEventListener;
 import org.apache.geode.cache.util.Gateway;
@@ -52,7 +54,7 @@ import org.apache.geode.internal.serialization.StaticSerialization;
 import org.apache.geode.logging.internal.executors.LoggingThread;
 import org.apache.geode.logging.internal.log4j.api.LogService;
 
-public class GatewaySenderAdvisor extends DistributionAdvisor {
+public class GatewaySenderAdvisor extends DistributionAdvisor implements ComponentStatus {
   private static final Logger logger = LogService.getLogger();
 
   private DistributedLockService lockService;
@@ -75,6 +77,8 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
 
   public static GatewaySenderAdvisor createGatewaySenderAdvisor(DistributionAdvisee sender) {
     GatewaySenderAdvisor advisor = new GatewaySenderAdvisor(sender);
+    StatusReporter.getStatus();
+    StatusReporter.registerComponent(advisor);
     advisor.initialize();
     return advisor;
   }
@@ -252,6 +256,8 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
   @Override
   public void profileUpdated(Profile profile) {
     if (profile instanceof GatewaySenderProfile) {
+      logger.info("MLH profileUpdated " + profile.getDistributedMember().getName());
+
       GatewaySenderProfile sp = (GatewaySenderProfile) profile;
       if (!sp.isParallel) { // SerialGatewaySender
         if (!sp.isRunning) {
@@ -262,11 +268,9 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
           if (!this.sender.isPrimary()) {
             if (!adviseEldestGatewaySender()) {// AND this is not the eldest
                                                // sender
-              if (logger.isDebugEnabled()) {
-                logger.debug(
-                    "Sender {} is not the eldest in the system. Giving preference to eldest sender to become primary...",
-                    this.sender);
-              }
+              logger.debug(
+                  "Sender {} is not the eldest in the system. Giving preference to eldest sender to become primary...",
+                  this.sender);
               return;
             }
             launchLockObtainingVolunteerThread();
@@ -287,6 +291,8 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
   @Override
   protected void profileRemoved(Profile profile) {
     if (profile instanceof GatewaySenderProfile) {
+      logger.info("MLH profileRemoved " + profile.getDistributedMember().getName());
+
       GatewaySenderProfile sp = (GatewaySenderProfile) profile;
       if (!sp.isParallel) {// SerialGatewaySender
         // if there is a primary sender, then don't volunteer for primary
@@ -295,11 +301,9 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
         }
         if (!this.sender.isPrimary()) {// IF this sender is not primary
           if (!adviseEldestGatewaySender()) {// AND this is not the eldest sender
-            if (logger.isDebugEnabled()) {
-              logger.debug(
-                  "Sender {} is not the eldest in the system. Giving preference to eldest sender to become primary...",
-                  this.sender);
-            }
+            logger.debug(
+                "Sender {} is not the eldest in the system. Giving preference to eldest sender to become primary...",
+                this.sender);
             return;
           }
           launchLockObtainingVolunteerThread();
@@ -320,29 +324,21 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
       this.lockService = DLockService.create(dlsName, ds, true, true, true);
     }
     Assert.assertTrue(this.lockService != null);
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Obtained DistributedLockService: {}", this, this.lockService);
-    }
+    logger.debug("{}: Obtained DistributedLockService: {}", this, this.lockService);
   }
 
   public boolean volunteerForPrimary() {
-    if (logger.isDebugEnabled()) {
-      logger.debug("Sender : {} is volunteering for Primary ", this.sender.getId());
-    }
+    logger.debug("Sender : {} is volunteering for Primary ", this.sender.getId());
 
     if (advisePrimaryGatewaySender() == null) {
       if (!adviseEldestGatewaySender()) {
-        if (logger.isDebugEnabled()) {
-          logger.debug(
-              "Sender {} is not the eldest in the system. Giving preference to eldest sender to become primary...",
-              this.sender);
-        }
+        logger.debug(
+            "Sender {} is not the eldest in the system. Giving preference to eldest sender to become primary...",
+            this.sender);
         return false;
       }
-      if (logger.isDebugEnabled()) {
-        logger.debug("Sender : {} no Primary available. So going to acquire distributed lock",
-            this.sender);
-      }
+      logger.debug("Sender : {} no Primary available. So going to acquire distributed lock",
+          this.sender);
       this.lockService.lock(this.lockToken, 10000, -1);
       return this.lockService.isHeldByCurrentThread(this.lockToken);
     }
@@ -404,13 +400,13 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
   }
 
   public void makePrimary() {
-    logger.info("{} : Starting as primary", this.sender);
+    logger.info("{} : Starting as primary", this.sender.id);
     AbstractGatewaySenderEventProcessor eventProcessor = this.sender.getEventProcessor();
     if (eventProcessor != null) {
       eventProcessor.removeCacheListener();
     }
 
-    logger.info("{} : Becoming primary gateway sender", this.sender);
+    logger.info("{} : Becoming primary gateway sender", this.sender.id);
     notifyAndBecomePrimary();
     new UpdateAttributesProcessor(this.sender).distribute(false);
   }
@@ -429,10 +425,8 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
   }
 
   public void makeSecondary() {
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Did not obtain the lock on {}. Starting as secondary gateway sender.",
-          this.sender, this.lockToken);
-    }
+    logger.debug("{}: Did not obtain the lock on {}. Starting as secondary gateway sender.",
+        this.sender, this.lockToken);
 
     // Set primary flag to false
     logger.info(
@@ -451,15 +445,11 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
         if (!(GatewaySenderAdvisor.this.sender.isRunning())) {
           return;
         }
-        if (logger.isDebugEnabled()) {
-          logger.debug("{}: Obtaining the lock on {}", this, GatewaySenderAdvisor.this.lockToken);
-        }
+        logger.debug("{}: Obtaining the lock on {}", this, GatewaySenderAdvisor.this.lockToken);
 
         if (volunteerForPrimary()) {
-          if (logger.isDebugEnabled()) {
-            logger.debug("{}: Obtained the lock on {}", this,
-                GatewaySenderAdvisor.this.lockToken);
-          }
+          logger.debug("{}: Obtained the lock on {}", this,
+              GatewaySenderAdvisor.this.lockToken);
           logger.info("{} is becoming primary gateway Sender.",
               GatewaySenderAdvisor.this);
 
@@ -484,6 +474,8 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
 
   public void waitToBecomePrimary(AbstractGatewaySenderEventProcessor callingProcessor)
       throws InterruptedException {
+    logger.info("MLH {} : waitToBecomePrimary", this.sender.getId());
+
     if (isPrimary()) {
       return;
     }
@@ -497,6 +489,24 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
         }
       }
     }
+  }
+
+  @Override
+  public String name() {
+    return "Gateway Sender Advisor";
+  }
+
+  @Override
+  public String getStatusString() {
+    return "Running";
+  }
+
+  @Override
+  public void print() {
+    logger.info(" Server Name: " + name() + " Component Status: " + getStatusString()
+        + " isPrimary: " + isPrimary() + " Advisee: " + getAdvisee() + " Sender: " + sender
+        + " Profiles: " + profiles);
+
   }
 
   /**
@@ -758,6 +768,7 @@ public class GatewaySenderAdvisor extends DistributionAdvisor {
 
   @Override
   public void close() {
+    logger.info("MLH close Removing profile " + this.sender.locName);
     new UpdateAttributesProcessor(this.getAdvisee(), true).distribute(false);
     super.close();
   }

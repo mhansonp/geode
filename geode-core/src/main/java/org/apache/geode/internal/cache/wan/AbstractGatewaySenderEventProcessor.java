@@ -339,9 +339,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
     this.isPaused = false;
 
     // Notify thread to resume
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Resumed dispatching", this);
-    }
+    logger.debug("{}: Resumed dispatching", this);
     synchronized (this.pausedLock) {
       this.pausedLock.notifyAll();
     }
@@ -726,9 +724,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
                 }
               }
             } // unsuccessful batch
-            if (logger.isDebugEnabled()) {
-              logger.debug("Finished processing events (batch #{})", (getBatchId() - 1));
-            }
+            logger.debug("Finished processing events (batch #{})", (getBatchId() - 1));
           } finally {
             afterExecute();
           }
@@ -739,9 +735,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
         this.resetLastPeekedEvents = true;
         // most possible case is ParallelWan when user PR is locally destroyed
         // shadow PR is also locally destroyed
-        if (logger.isDebugEnabled()) {
-          logger.debug("Observed RegionDestroyedException on Queue's region.");
-        }
+        logger.debug("Observed RegionDestroyedException on Queue's region.");
       } catch (CancelException e) {
         logger.debug("Caught cancel exception", e);
         setIsStopped(true);
@@ -791,9 +785,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
     List<GatewaySenderEventImpl> conflatedEvents = null;
     // Conflate the batch if necessary
     if (this.sender.isBatchConflationEnabled() && events.size() > 1) {
-      if (logger.isDebugEnabled()) {
-        logEvents("original", events);
-      }
+      logEvents("original", events);
       Map<ConflationKey, GatewaySenderEventImpl> conflatedEventsMap =
           new LinkedHashMap<ConflationKey, GatewaySenderEventImpl>();
       conflatedEvents = new ArrayList<GatewaySenderEventImpl>();
@@ -832,9 +824,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
       // Increment the events conflated from batches statistic
       this.sender.getStatistics()
           .incEventsConflatedFromBatches(events.size() - conflatedEvents.size());
-      if (logger.isDebugEnabled()) {
-        logEvents("conflated", conflatedEvents);
-      }
+      logEvents("conflated", conflatedEvents);
     } else {
       conflatedEvents = events;
     }
@@ -1043,9 +1033,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
         }
       }
       List<GatewaySenderEventImpl> events = eventsArr[0];
-      if (logger.isDebugEnabled()) {
-        logger.debug("Removing events from the queue {}", events.size());
-      }
+      logger.debug("Removing events from the queue {}", events.size());
       eventQueueRemove(events.size());
 
       logThresholdExceededAlerts(events);
@@ -1097,9 +1085,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
       if (!this.isPaused) {
         return;
       }
-      if (logger.isDebugEnabled()) {
-        logger.debug("GatewaySenderEventProcessor is paused. Waiting for Resumption");
-      }
+      logger.debug("GatewaySenderEventProcessor is paused. Waiting for Resumption");
       this.isDispatcherWaiting = true;
       this.pausedLock.notifyAll();
       while (this.isPaused) {
@@ -1191,9 +1177,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
     }
     resumeDispatching();
 
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Notifying the dispatcher to terminate", this);
-    }
+    logger.debug("{}: Notifying the dispatcher to terminate", this);
 
     // If this is the primary, stay alive for a predefined time
     // OR until the queue becomes empty
@@ -1202,9 +1186,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
         try {
           while (!(this.queue.size() == 0)) {
             Thread.sleep(5000);
-            if (logger.isDebugEnabled()) {
-              logger.debug("{}: Waiting for the queue to get empty.", this);
-            }
+            logger.debug("{}: Waiting for the queue to get empty.", this);
           }
         } catch (InterruptedException e) {
           // interrupted
@@ -1219,16 +1201,16 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
         }
       }
     } else {
+      logger.debug("{}: notifyPrimaryLock.", this);
       this.sender.getSenderAdvisor().notifyPrimaryLock();
     }
+      logger.debug("{}: setIsStopped to true.", this);
 
     setIsStopped(true);
     dispatcher.stop();
 
     if (this.isAlive()) {
-      if (logger.isDebugEnabled()) {
-        logger.debug("{}: Joining with the dispatcher thread upto limit of 5 seconds", this);
-      }
+      logger.debug("{}: Joining with the dispatcher thread upto limit of 5 seconds", this);
       try {
         this.join(5000); // wait for our thread to stop
         if (this.isAlive()) {
@@ -1250,15 +1232,11 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
 
     closeProcessor();
 
-    if (logger.isDebugEnabled()) {
-      logger.debug("Stopped dispatching: {}", this);
-    }
+    logger.debug("Stopped dispatching: {}", this);
   }
 
   public void closeProcessor() {
-    if (logger.isDebugEnabled()) {
-      logger.debug("Closing dispatcher");
-    }
+    logger.debug("Closing dispatcher");
     try {
       if (this.sender.isPrimary() && this.queue.size() > 0) {
         logger.warn("Destroying GatewayEventDispatcher with actively queued data.");
@@ -1273,16 +1251,12 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
       // just checking in case we should log a warning
     } finally {
       this.queue.close();
-      if (logger.isDebugEnabled()) {
-        logger.debug("Closed dispatcher");
-      }
+      logger.debug("Closed dispatcher");
     }
   }
 
   protected void destroyProcessor() {
-    if (logger.isDebugEnabled()) {
-      logger.debug("Destroying dispatcher");
-    }
+    logger.debug("Destroying dispatcher");
     try {
       try {
         if (this.queue.peek() != null) {
@@ -1299,9 +1273,7 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
       // just checking in case we should log a warning
     } finally {
       this.queue.getRegion().localDestroyRegion();
-      if (logger.isDebugEnabled()) {
-        logger.debug("Destroyed dispatcher");
-      }
+      logger.debug("Destroyed dispatcher");
     }
   }
 

@@ -409,29 +409,38 @@ public class ReplyProcessor21 implements MembershipListener {
   }
 
   protected void process(DistributionMessage msg, boolean warn) {
-    if (logger.isDebugEnabled()) {
-      logger.debug("{} got process({}) from {}", this, msg, msg.getSender());
-    }
+    logger.info("MLH {} got process({}) from {}", this, msg, msg.getSender());
+    logger.info("MLH Process 1 msg {}", msg);
     if (msg instanceof ReplyMessage) {
       ReplyException ex = ((ReplyMessage) msg).getException();
+      logger.info("MLH Process 2 msg {} with exception of {}", msg, ex);
+
       if (ex != null) {
         if (ex.getCause() instanceof DSFIDNotFoundException) {
           processException(msg, (DSFIDNotFoundException) ex.getCause());
         } else {
           processException(msg, ex);
         }
+      } else {
+        ReplyMessage replyMessage = (ReplyMessage) msg;
+          logger.info(
+              "MLH Process 3 msg {}  ignored ? {} was closed ? {} ",replyMessage,
+              replyMessage.ignored, replyMessage.closed);
       }
     }
 
+    logger.info("MLH Process 4");
+
     final InternalDistributedMember sender = msg.getSender();
     if (!removeMember(sender, false) && warn) {
+      logger.info("MLH Process 5 ");
       // if the member hasn't left the system, something is wrong
       final DistributionManager dm = getDistributionManager(); // fix for bug 33253
       Set ids = getDistributionManagerIds();
       if (ids == null || ids.contains(sender)) {
         List viewMembers = dm.getViewMembers();
         if (system.getConfig().getMcastPort() == 0 // could be using multicast & will get responses
-                                                   // from everyone
+            // from everyone
             && (viewMembers == null || viewMembers.contains(sender))) {
           logger.warn(
               "Received reply from member {} but was not expecting one. More than one reply may have been received. The reply that was not expected is: {}",
@@ -439,6 +448,7 @@ public class ReplyProcessor21 implements MembershipListener {
         }
       }
     }
+    logger.info("MLH Process 6 ");
     checkIfDone();
   }
 
@@ -761,7 +771,7 @@ public class ReplyProcessor21 implements MembershipListener {
    * @param p_msecs the number of milliseconds to wait for replies, zero will be interpreted as
    *        Long.MAX_VALUE
    *
-   * @throws ReplyException an exception passed back in reply
+   * @throws ReplyException           an exception passed back in reply
    *
    * @throws InternalGemFireException if ack-threshold was exceeded and system property
    *         "ack-threshold-exception" is set to true
@@ -964,6 +974,7 @@ public class ReplyProcessor21 implements MembershipListener {
 
   @Override
   public String toString() {
+
     return "<" + shortName() + " " + this.getProcessorId() + " waiting for " + numMembers()
         + " replies" + (exception == null ? "" : (" exception: " + exception)) + " from "
         + membersToString() + ">";

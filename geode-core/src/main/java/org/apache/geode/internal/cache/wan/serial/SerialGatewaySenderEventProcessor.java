@@ -132,9 +132,7 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
     // Create the region queue
     this.queue = new SerialGatewaySenderQueue(sender, regionName, listener, cleanQueues);
 
-    if (logger.isDebugEnabled()) {
-      logger.debug("Created queue: {}", this.queue);
-    }
+    logger.debug("Created queue: {}", this.queue);
   }
 
   /**
@@ -202,9 +200,7 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
         completeFailover();
       }
       // Begin to process the message queue after becoming primary
-      if (logger.isDebugEnabled()) {
-        logger.debug("Beginning to process the message queue");
-      }
+      logger.debug("Beginning to process the message queue");
 
       if (!sender.isPrimary()) {
         logger.warn("About to process the message queue but not the primary.");
@@ -371,9 +367,7 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
       if (m != null) {
         for (EventWrapper ew : m.values()) {
           GatewaySenderEventImpl gatewayEvent = ew.event;
-          if (logger.isDebugEnabled()) {
-            logger.debug("releaseUnprocessedEvents:" + gatewayEvent);
-          }
+          logger.debug("releaseUnprocessedEvents:" + gatewayEvent);
           gatewayEvent.release();
         }
         this.unprocessedEvents = null;
@@ -405,7 +399,10 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
     // used in the sendBatch method, and it can't be null. See EntryEventImpl
     // for details.
     GatewaySenderEventImpl senderEvent = null;
-
+    boolean isDebugEnabled = logger.isDebugEnabled();
+    if (isDebugEnabled) {
+      logger.debug("MLH enqueueEvent: 1 event = " + event);
+    }
     boolean isPrimary = sender.isPrimary();
     if (!isPrimary) {
       // Fix for #40615. We need to check if we've now become the primary
@@ -428,6 +425,9 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
             senderEvent =
                 new GatewaySenderEventImpl(operation, event, substituteValue, false,
                     isLastEventInTransaction);
+            if (isDebugEnabled) {
+              logger.debug("MLH enqueueEvent: 2 handleSecondaryEvent senderEvent = " + senderEvent);
+            }
             handleSecondaryEvent(senderEvent);
           }
         }
@@ -447,6 +447,9 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
 
       boolean queuedEvent = false;
       try {
+        if (isDebugEnabled) {
+          logger.debug("MLH enqueueEvent: 3 queuePrimaryEvent senderEvent = " + senderEvent);
+        }
         queuedEvent = queuePrimaryEvent(senderEvent);
       } finally {
         // When queuePrimaryEvent() failed with some exception, it could
@@ -455,6 +458,9 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
         // and IllegalStateException could be thrown if getDeserializedValue is called
         // when the event is accessed through the region queue.
         if (!queuedEvent) {
+          if (isDebugEnabled) {
+            logger.debug("MLH enqueueEvent: 3 release senderEvent = " + senderEvent);
+          }
           GatewaySenderEventImpl.release(senderEvent);
         }
       }
@@ -465,14 +471,10 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
       throws IOException, CacheException {
     // Queue the event
     GatewaySenderStats statistics = this.sender.getStatistics();
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Queueing event ({}): {}", sender.getId(),
-          (statistics.getEventsQueued() + 1), gatewayEvent);
-    }
+    logger.debug("{}: Queueing event ({}): {}", sender.getId(),
+        (statistics.getEventsQueued() + 1), gatewayEvent);
     if (!sender.beforeEnqueue(gatewayEvent)) {
-      if (logger.isDebugEnabled()) {
-        logger.debug("Event {} is not added to queue.", gatewayEvent);
-      }
+      logger.debug("Event {} is not added to queue.", gatewayEvent);
       statistics.incEventsFiltered();
       return false;
     }
@@ -481,22 +483,16 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
     try {
       putDone = this.queue.put(gatewayEvent);
     } catch (InterruptedException e) {
-      // Asif Not expected from SingleWriteSingleReadRegionQueue as it does not
-      // throw
-      // InterruptedException. But since both HARegionQueue and
-      // SingleReadSingleWriteRegionQueue
+      // Asif Not expected from SingleWriteSingleReadRegionQueue as it does not throw
+      // InterruptedException. But since both HARegionQueue and SingleReadSingleWriteRegionQueue
       // extend RegionQueue , it has to handle InterruptedException
       Thread.currentThread().interrupt();
       getSender().getCancelCriterion().checkCancelInProgress(e);
     }
     statistics.endPut(start);
-    if (logger.isDebugEnabled()) {
-      logger.debug("{}: Queued event ({}): {}", sender.getId(), (statistics.getEventsQueued()),
-          gatewayEvent);
-    }
-    // this._logger.warning(getGateway() + ": Queued event (" +
-    // (statistics.getEventsQueued()) + "): " + gatewayEvent + " queue size: "
-    // + this._eventQueue.size());
+    logger.debug("{}: Queued event ({}): {}", sender.getId(), (statistics.getEventsQueued()),
+        gatewayEvent);
+
     /*
      * FAILOVER TESTING CODE System.out.println(getName() + ": Queued event (" +
      * (statistics.getEventsQueued()) + "): " + gatewayEvent.getId());
@@ -599,6 +595,11 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
    */
   protected void handlePrimaryDestroy(final GatewaySenderEventImpl gatewayEvent) {
     Executor my_executor = this.executor;
+
+    boolean isDebugEnabled = logger.isDebugEnabled();
+    if (isDebugEnabled) {
+      logger.debug("MLH handlePrimaryDestroy: 1 gatewayEvent = " + gatewayEvent);
+    }
     synchronized (listenerObjectLock) {
       if (my_executor == null) {
         // should mean we are now primary
@@ -619,6 +620,12 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
    */
   protected boolean basicHandlePrimaryDestroy(final EventID eventId,
       boolean addToUnprocessedTokens) {
+
+    boolean isDebugEnabled = logger.isDebugEnabled();
+    if (isDebugEnabled) {
+      logger.debug("MLH basicHandlePrimaryDestroy: 1 eventId = " + eventId);
+    }
+
     if (this.sender.isPrimary()) {
       // no need to do anything if we have become the primary
       return false;
@@ -657,6 +664,10 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
   }
 
   protected void basicHandlePrimaryEvent(final GatewaySenderEventImpl gatewayEvent) {
+    boolean isDebugEnabled = logger.isDebugEnabled();
+    if (isDebugEnabled) {
+      logger.debug("MLH basicHandlePrimaryEvent: 1 gatewayEvent = " + gatewayEvent);
+    }
     if (this.sender.isPrimary()) {
       // no need to do anything if we have become the primary
       return;
@@ -708,6 +719,10 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
   }
 
   private void basicHandleSecondaryEvent(final GatewaySenderEventImpl gatewayEvent) {
+    boolean isDebugEnabled = logger.isDebugEnabled();
+    if (isDebugEnabled) {
+      logger.debug("MLH basicHandleSecondaryEvent: 1 gatewayEvent = " + gatewayEvent);
+    }
     boolean freeGatewayEvent = true;
     try {
       GatewaySenderStats statistics = this.sender.getStatistics();
@@ -861,9 +876,7 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
 
   @Override
   public void initializeEventDispatcher() {
-    if (logger.isDebugEnabled()) {
-      logger.debug(" Creating the GatewayEventCallbackDispatcher");
-    }
+    logger.debug(" Creating the GatewayEventCallbackDispatcher");
     this.dispatcher = new GatewaySenderEventCallbackDispatcher(this);
 
   }
@@ -881,24 +894,18 @@ public class SerialGatewaySenderEventProcessor extends AbstractGatewaySenderEven
     destroyEvent.setEventId(dropEvent.getEventId());
     destroyEvent.disallowOffHeapValues();
     destroyEvent.setTailKey(-1L);
-    if (logger.isDebugEnabled()) {
-      logger.debug(
-          "SerialGatewaySenderEventProcessor sends BatchDestroyOperation to secondary for event {}",
-          destroyEvent);
-    }
+    logger.debug(
+        "SerialGatewaySenderEventProcessor sends BatchDestroyOperation to secondary for event {}",
+        destroyEvent);
 
     try {
       BatchDestroyOperation op = new BatchDestroyOperation(destroyEvent);
       op.distribute();
-      if (logger.isDebugEnabled()) {
-        logger.debug("BatchRemovalThread completed destroy of dropped event {}", dropEvent);
-      }
+      logger.debug("BatchRemovalThread completed destroy of dropped event {}", dropEvent);
     } catch (Exception ignore) {
-      if (logger.isDebugEnabled()) {
-        logger.debug(
-            "Exception in sending dropped event could be ignored in order not to interrupt sender starting",
-            ignore);
-      }
+      logger.debug(
+          "Exception in sending dropped event could be ignored in order not to interrupt sender starting",
+          ignore);
     }
   }
 

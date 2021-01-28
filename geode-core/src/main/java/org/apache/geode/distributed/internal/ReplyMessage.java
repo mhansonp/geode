@@ -334,6 +334,10 @@ public class ReplyMessage extends HighPriorityDistributionMessage {
         sb.append(ex);
       }
     }
+    sb.append(" ignored ? ");
+    sb.append(this.ignored);
+    sb.append(" closed ? ");
+    sb.append(this.closed);
     return sb;
   }
 

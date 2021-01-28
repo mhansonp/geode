@@ -98,9 +98,7 @@ public class ConcurrentParallelGatewaySenderEventProcessor
         targetRs.add(pr);
       }
     }
-    if (logger.isDebugEnabled()) {
-      logger.debug("The target PRs are {} Dispatchers: {}", targetRs, nDispatcher);
-    }
+    logger.debug("The target PRs are {} Dispatchers: {}", targetRs, nDispatcher);
 
     createProcessors(sender.getDispatcherThreads(), targetRs, cleanQueues);
 
@@ -111,9 +109,7 @@ public class ConcurrentParallelGatewaySenderEventProcessor
   protected void createProcessors(int dispatcherThreads, Set<Region> targetRs,
       boolean cleanQueues) {
     processors = new ParallelGatewaySenderEventProcessor[sender.getDispatcherThreads()];
-    if (logger.isDebugEnabled()) {
-      logger.debug("Creating AsyncEventProcessor");
-    }
+    logger.debug("Creating AsyncEventProcessor");
     for (int i = 0; i < sender.getDispatcherThreads(); i++) {
       processors[i] = new ParallelGatewaySenderEventProcessor(sender, targetRs, i,
           sender.getDispatcherThreads(), getThreadMonitorObj(), cleanQueues);
@@ -158,10 +154,8 @@ public class ConcurrentParallelGatewaySenderEventProcessor
     ConcurrentParallelGatewaySenderQueue cpgsq = (ConcurrentParallelGatewaySenderQueue) queue;
     PartitionedRegion prQ = cpgsq.getRegion(droppedEvent.getRegion().getFullPath());
     if (prQ == null) {
-      if (logger.isDebugEnabled()) {
-        logger.debug("shadow partitioned region " + droppedEvent.getRegion().getFullPath()
-            + " is not created yet.");
-      }
+      logger.debug("shadow partitioned region " + droppedEvent.getRegion().getFullPath()
+          + " is not created yet.");
       return;
     }
     int bucketId = PartitionedRegionHelper.getHashKey((EntryOperation) droppedEvent);
@@ -172,10 +166,8 @@ public class ConcurrentParallelGatewaySenderEventProcessor
     if (isPrimary) {
       pgsq.sendQueueRemovalMesssageForDroppedEvent(prQ, bucketId, shadowKey);
       this.sender.getStatistics().incEventsDroppedDueToPrimarySenderNotRunning();
-      if (logger.isDebugEnabled()) {
-        logger.debug("register dropped event for primary queue. BucketId is " + bucketId
-            + ", shadowKey is " + shadowKey + ", prQ is " + prQ.getFullPath());
-      }
+      logger.debug("register dropped event for primary queue. BucketId is " + bucketId
+          + ", shadowKey is " + shadowKey + ", prQ is " + prQ.getFullPath());
     }
   }
 
@@ -259,11 +251,9 @@ public class ConcurrentParallelGatewaySenderEventProcessor
       for (Future<Boolean> f : futures) {
         try {
           Boolean b = f.get();
-          if (logger.isDebugEnabled()) {
-            logger.debug(
-                "ConcurrentParallelGatewaySenderEventProcessor: {} stopped dispatching: {}",
-                (b ? "Successfully" : "Unsuccessfully"), this);
-          }
+          logger.debug(
+              "ConcurrentParallelGatewaySenderEventProcessor: {} stopped dispatching: {}",
+              (b ? "Successfully" : "Unsuccessfully"), this);
         } catch (ExecutionException e) {
           // we don't expect any exception but if caught then eat it and log warning
           logger.warn(String.format("GatewaySender %s caught exception while stopping: %s", sender,
@@ -276,9 +266,7 @@ public class ConcurrentParallelGatewaySenderEventProcessor
 
     stopperService.shutdown();
     closeProcessor();
-    if (logger.isDebugEnabled()) {
-      logger.debug("ConcurrentParallelGatewaySenderEventProcessor: Stopped dispatching: {}", this);
-    }
+    logger.debug("ConcurrentParallelGatewaySenderEventProcessor: Stopped dispatching: {}", this);
   }
 
   @Override
@@ -294,9 +282,7 @@ public class ConcurrentParallelGatewaySenderEventProcessor
       parallelProcessor.pauseDispatching();
     }
     super.pauseDispatching();
-    if (logger.isDebugEnabled()) {
-      logger.debug("ConcurrentParallelGatewaySenderEventProcessor: Paused dispatching: {}", this);
-    }
+    logger.debug("ConcurrentParallelGatewaySenderEventProcessor: Paused dispatching: {}", this);
   }
 
   @Override
@@ -312,9 +298,7 @@ public class ConcurrentParallelGatewaySenderEventProcessor
       parallelProcessor.resumeDispatching();
     }
     super.resumeDispatching();
-    if (logger.isDebugEnabled()) {
-      logger.debug("ConcurrentParallelGatewaySenderEventProcessor: Resumed dispatching: {}", this);
-    }
+    logger.debug("ConcurrentParallelGatewaySenderEventProcessor: Resumed dispatching: {}", this);
   }
 
   @Override

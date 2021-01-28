@@ -75,11 +75,9 @@ public class WaitUntilParallelGatewaySenderFlushedCoordinator
       // create and submit callable with updated timeout
       Callable<Boolean> callable = createWaitUntilBucketRegionQueueFlushedCallable(
           (BucketRegionQueue) br, nanosRemaining, TimeUnit.NANOSECONDS);
-      if (logger.isDebugEnabled()) {
-        logger.debug(
-            "WaitUntilParallelGatewaySenderFlushedCoordinator: Submitting callable for bucket "
-                + br.getId() + " callable=" + callable + " nanosRemaining=" + nanosRemaining);
-      }
+      logger.debug(
+          "WaitUntilParallelGatewaySenderFlushedCoordinator: Submitting callable for bucket "
+              + br.getId() + " callable=" + callable + " nanosRemaining=" + nanosRemaining);
       callableFutures.add(service.submit(callable));
       callableCount++;
       if ((callableCount % CALLABLES_CHUNK_SIZE) == 0
@@ -88,10 +86,8 @@ public class WaitUntilParallelGatewaySenderFlushedCoordinator
             new CallablesChunkResults(localResult, exceptionToThrow, callableFutures).invoke();
         localResult = callablesChunkResults.getLocalResult();
         exceptionToThrow = callablesChunkResults.getExceptionToThrow();
-        if (logger.isDebugEnabled()) {
-          logger.debug("WaitUntilParallelGatewaySenderFlushedCoordinator: Processed local result= "
-              + localResult + "; exceptionToThrow= " + exceptionToThrow);
-        }
+        logger.debug("WaitUntilParallelGatewaySenderFlushedCoordinator: Processed local result= "
+            + localResult + "; exceptionToThrow= " + exceptionToThrow);
         if (exceptionToThrow != null) {
           throw exceptionToThrow;
         }
@@ -100,10 +96,8 @@ public class WaitUntilParallelGatewaySenderFlushedCoordinator
     }
 
     // Return the full result
-    if (logger.isDebugEnabled()) {
-      logger.debug("WaitUntilParallelGatewaySenderFlushedCoordinator: Returning full result="
-          + (localResult));
-    }
+    logger.debug("WaitUntilParallelGatewaySenderFlushedCoordinator: Returning full result="
+        + (localResult));
     return localResult;
   }
 
@@ -172,12 +166,10 @@ public class WaitUntilParallelGatewaySenderFlushedCoordinator
       try {
         if (msg instanceof ReplyMessage) {
           ReplyMessage reply = (ReplyMessage) msg;
-          if (logger.isDebugEnabled()) {
-            logger
-                .debug("WaitUntilGatewaySenderFlushedReplyProcessor: Processing reply from sender="
-                    + reply.getSender() + "; returnValue=" + reply.getReturnValue() + "; exception="
-                    + reply.getException());
-          }
+          logger
+              .debug("WaitUntilGatewaySenderFlushedReplyProcessor: Processing reply from sender="
+                  + reply.getSender() + "; returnValue=" + reply.getReturnValue() + "; exception="
+                  + reply.getException());
           if (reply.getException() == null) {
             this.responses.put(reply.getSender(), (Boolean) reply.getReturnValue());
           } else {
@@ -194,10 +186,8 @@ public class WaitUntilParallelGatewaySenderFlushedCoordinator
       for (boolean singleMemberResult : this.responses.values()) {
         combinedResult = combinedResult && singleMemberResult;
       }
-      if (logger.isDebugEnabled()) {
-        logger.debug("WaitUntilGatewaySenderFlushedReplyProcessor: Returning combinedResult="
-            + combinedResult);
-      }
+      logger.debug("WaitUntilGatewaySenderFlushedReplyProcessor: Returning combinedResult="
+          + combinedResult);
       return combinedResult;
     }
   }

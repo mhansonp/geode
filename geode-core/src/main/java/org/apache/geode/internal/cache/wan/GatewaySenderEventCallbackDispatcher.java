@@ -70,16 +70,12 @@ public class GatewaySenderEventCallbackDispatcher implements GatewaySenderEventD
     GatewaySenderStats statistics = this.eventProcessor.sender.getStatistics();
     boolean success = false;
     try {
-      if (logger.isDebugEnabled()) {
-        logger.debug("About to dispatch batch");
-      }
+      logger.debug("About to dispatch batch");
       long start = statistics.startTime();
       // Send the batch to the corresponding GatewaySender
       success = dispatchBatch(events);
       statistics.endBatch(start, events.size());
-      if (logger.isDebugEnabled()) {
-        logger.debug("Done dispatching the batch");
-      }
+      logger.debug("Done dispatching the batch");
     } catch (GatewaySenderException e) {
       // Do nothing in this case. The exception has already been logged.
     } catch (CancelException e) {

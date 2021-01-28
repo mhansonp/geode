@@ -37,10 +37,12 @@ import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
@@ -60,6 +62,8 @@ import joptsimple.OptionSet;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.Logger;
 
+import org.apache.geode.ComponentStatus;
+import org.apache.geode.StatusReporter;
 import org.apache.geode.SystemFailure;
 import org.apache.geode.annotations.Immutable;
 import org.apache.geode.annotations.VisibleForTesting;
@@ -114,7 +118,7 @@ import org.apache.geode.util.internal.GeodeGlossary;
  * @since GemFire 7.0
  */
 @SuppressWarnings("unused")
-public class ServerLauncher extends AbstractLauncher<String> {
+public class ServerLauncher extends AbstractLauncher<String> implements ComponentStatus {
 
   private static final Logger log = LogService.getLogger();
 
@@ -195,7 +199,7 @@ public class ServerLauncher extends AbstractLauncher<String> {
   private final ControlNotificationHandler controlHandler;
 
   private final AtomicBoolean starting = new AtomicBoolean(false);
-
+  private final Set<ComponentStatus> subComponentStatus = new HashSet<>();
   private final boolean assignBuckets;
   private final boolean deletePidFileOnStop;
   private final boolean disableDefaultServer;
@@ -832,7 +836,8 @@ public class ServerLauncher extends AbstractLauncher<String> {
         }
 
         awaitStartupTasks(cache, startTime);
-
+        StatusReporter.start();
+        StatusReporter.registerComponent(this);
         debug("Running Server on (%1$s) in (%2$s) as (%3$s)...", getId(), getWorkingDirectory(),
             getMember());
         running.set(true);
@@ -1367,6 +1372,26 @@ public class ServerLauncher extends AbstractLauncher<String> {
         ? controllableProcessFactory.get()
         : new FileControllableProcess(controlHandler, new File(getWorkingDirectory()),
             ProcessType.SERVER, isForcing());
+  }
+
+  @Override
+  public String name() {
+    return getId();
+  }
+
+  @Override
+  public String getStatusString() {
+    return isRunning() ? "running" : "not running";
+  }
+
+
+
+  @Override
+  public void print() {
+    logger.info(" Server Name: " + name() + " Component Status: " + getStatusString());
+    for (ComponentStatus componentStatus : subComponentStatus) {
+      componentStatus.print();
+    }
   }
 
   private class ServerControllerParameters implements ProcessControllerParameters {

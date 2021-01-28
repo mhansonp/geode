@@ -613,9 +613,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       // close the GatewaySenderAdvisor
       GatewaySenderAdvisor advisor = this.getSenderAdvisor();
       if (advisor != null) {
-        if (logger.isDebugEnabled()) {
-          logger.debug("Stopping the GatewaySender advisor");
-        }
+        logger.debug("Stopping the GatewaySender advisor");
         advisor.close();
       }
 
@@ -1036,14 +1034,22 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
           seca.getRecipientDSIds().addAll(allRemoteDSIds);
         }
       } else {
+
         GatewaySenderEventCallbackArgument geCallbackArg =
             new GatewaySenderEventCallbackArgument(callbackArg, this.getMyDSId(), allRemoteDSIds);
         clonedEvent.setCallbackArgument(geCallbackArg);
+
+        if (isDebugEnabled) {
+          logger.debug("MLH distribute: 1 creating object GatewaySenderEventCallbackArgument:" + clonedEvent);
+        }
       }
 
       // If this gateway is not running, return
       if (!isRunning()) {
         if (this.isPrimary()) {
+          if (isDebugEnabled) {
+            logger.debug("MLH distribute: 2 recordDroppedEvent:" + clonedEvent);
+          }
           recordDroppedEvent(clonedEvent);
         }
         if (isDebugEnabled) {
@@ -1079,6 +1085,9 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
             logger.debug("Returning back without putting into the gateway sender queue:" + event);
           }
           if (this.isPrimary()) {
+            if (isDebugEnabled) {
+              logger.debug("MLH distribute: 3 recordDroppedEvent:" + clonedEvent);
+            }
             recordDroppedEvent(clonedEvent);
           }
           return;
@@ -1099,7 +1108,9 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
           // Get substitution value to enqueue if necessary
           Object substituteValue = getSubstituteValue(clonedEvent, operation);
-
+          if (isDebugEnabled) {
+            logger.debug("MLH distribute: 4 enqueueEvent:" + clonedEvent);
+          }
           ev.enqueueEvent(operation, clonedEvent, substituteValue, isLastEventInTransaction);
         } catch (CancelException e) {
           logger.debug("caught cancel exception", e);
@@ -1128,11 +1139,11 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
   private void recordDroppedEvent(EntryEventImpl event) {
     if (this.eventProcessor != null) {
       this.eventProcessor.registerEventDroppedInPrimaryQueue(event);
+      logger.debug("registerEventDroppedInPrimaryQueue event: {}", event);
+
     } else {
       tmpDroppedEvents.add(event);
-      if (logger.isDebugEnabled()) {
-        logger.debug("added to tmpDroppedEvents event: {}", event);
-      }
+      logger.debug("added to tmpDroppedEvents event: {}", event);
     }
   }
 
@@ -1169,10 +1180,8 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
         synchronized (this.queuedEventsSync) {
           while ((nextEvent = tmpQueuedEvents.poll()) != null) {
             try {
-              if (logger.isDebugEnabled()) {
-                logger.debug("Event :{} is enqueued to GatewaySenderQueue from TempQueue",
-                    nextEvent);
-              }
+              logger.debug("Event :{} is enqueued to GatewaySenderQueue from TempQueue",
+                  nextEvent);
               stats.decTempQueueSize();
               this.eventProcessor.enqueueEvent(nextEvent.getOperation(), nextEvent.getEvent(),
                   nextEvent.getSubstituteValue());
@@ -1204,11 +1213,9 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
       while (itr.hasNext()) {
         TmpQueueEvent event = itr.next();
         if (tailKey.equals(event.getEvent().getTailKey())) {
-          if (logger.isDebugEnabled()) {
-            logger.debug(
-                "shadowKey {} is found in tmpQueueEvents at AbstractGatewaySender level. Removing from there..",
-                tailKey);
-          }
+          logger.debug(
+              "shadowKey {} is found in tmpQueueEvents at AbstractGatewaySender level. Removing from there..",
+              tailKey);
           event.release();
           itr.remove();
           return true;
@@ -1304,9 +1311,7 @@ public abstract class AbstractGatewaySender implements InternalGatewaySender, Di
 
         // Store the index locally
         this.eventIdIndex = index;
-        if (logger.isDebugEnabled()) {
-          logger.debug("{}: {} event id index: {}", this, messagePrefix, this.eventIdIndex);
-        }
+        logger.debug("{}: {} event id index: {}", this, messagePrefix, this.eventIdIndex);
       }
     } finally {
       // Unlock the lock if necessary

@@ -2166,7 +2166,7 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
 
     if (!keepDS && systemFailureCause == null
         && (isReconnecting() || system.getReconnectedSystem() != null)) {
-      logger.debug(
+      logger.info(
           "Cache is shutting down distributed system connection. isReconnecting={} reconnectedSystem={} keepAlive={} keepDS={}",
           isReconnecting(), system.getReconnectedSystem(), keepAlive, keepDS);
 
@@ -2206,28 +2206,34 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
 
         this.keepAlive = keepAlive;
         isClosing = true;
-        logger.info("{}: Now closing.", this);
+        logger.info("MLH {}: Now closing.", this);
 
         // we don't clear the prID map if there is a system failure. Other
         // threads may be hung trying to communicate with the map locked
         if (systemFailureCause == null) {
+          logger.info("Clearing the PartitionedRegion.clearPRIdMap");
           PartitionedRegion.clearPRIdMap();
         }
 
         TXStateProxy tx = null;
         try {
           if (transactionManager != null) {
+            logger.info("Pausing transactions in transactionManager");
             tx = transactionManager.pauseTransaction();
           }
 
           // do this before closing regions
+          logger.info("MLH Stopping the resourceManager");
+
           resourceManager.close();
 
           try {
+            logger.info("MLH Stopping the resourceAdvisor advisor");
             resourceAdvisor.close();
           } catch (CancelException ignore) {
           }
           try {
+            logger.info("MLH Stopping the jmxAdvisor advisor");
             jmxAdvisor.close();
           } catch (CancelException ignore) {
           }
@@ -2237,21 +2243,17 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
               sender.stop();
               GatewaySenderAdvisor advisor = ((AbstractGatewaySender) sender).getSenderAdvisor();
               if (advisor != null) {
-                if (isDebugEnabled) {
-                  logger.debug("Stopping the GatewaySender advisor");
-                }
+                logger.info("Stopping the GatewaySender advisor");
                 advisor.close();
               }
             } catch (CancelException ignore) {
             }
           }
-
+          logger.info("MLH destroyGatewaySenderLockService");
           destroyGatewaySenderLockService();
 
           if (eventThreadPool != null) {
-            if (isDebugEnabled) {
-              logger.debug("{}: stopping event thread pool...", this);
-            }
+            logger.info("{}: stopping event thread pool...", this);
             eventThreadPool.shutdown();
           }
 
@@ -2265,9 +2267,7 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
             stopServices();
 
             // no need to track PR instances
-            if (isDebugEnabled) {
-              logger.debug("{}: clearing partitioned regions...", this);
-            }
+            logger.info("{}: clearing partitioned regions...", this);
             synchronized (partitionedRegions) {
               int prSize = -partitionedRegions.size();
               partitionedRegions.clear();
@@ -2288,9 +2288,7 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
             InternalRegion prRoot = null;
 
             for (InternalRegion lr : rootRegions.values()) {
-              if (isDebugEnabled) {
-                logger.debug("{}: processing region {}", this, lr.getFullPath());
-              }
+              logger.info("{}: processing region {}", this, lr.getFullPath());
               if (PartitionedRegionHelper.PR_ROOT_REGION_NAME.equals(lr.getName())) {
                 prRoot = lr;
               } else {
@@ -2298,9 +2296,7 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
                   // this region will be closed internally by parent region
                   continue;
                 }
-                if (isDebugEnabled) {
-                  logger.debug("{}: closing region {}...", this, lr.getFullPath());
-                }
+                logger.info("{}: closing region {}...", this, lr.getFullPath());
                 try {
                   lr.handleCacheClose(op);
                 } catch (RuntimeException e) {
@@ -2314,9 +2310,7 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
             }
 
             try {
-              if (isDebugEnabled) {
-                logger.debug("{}: finishing partitioned region close...", this);
-              }
+              logger.info("{}: finishing partitioned region close...", this);
               PartitionedRegion.afterRegionsClosedByCacheClose(this);
               if (prRoot != null) {
                 // do the PR meta root region last
@@ -2334,9 +2328,7 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
 
             // Close the CqService Handle.
             try {
-              if (isDebugEnabled) {
-                logger.debug("{}: closing CQ service...", this);
-              }
+              logger.info("{}: closing CQ service...", this);
               cqService.close();
             } catch (RuntimeException ignore) {
               logger.info("Failed to get the CqService, to close during cache close (1).");
@@ -2344,20 +2336,16 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
 
             PoolManager.close(keepAlive);
 
-            if (isDebugEnabled) {
-              logger.debug("{}: notifying admins of close...", this);
-            }
+            logger.info("{}: notifying admins of close...", this);
             try {
               SystemMemberCacheEventProcessor.send(this, Operation.CACHE_CLOSE);
             } catch (CancelException ignore) {
               if (logger.isDebugEnabled()) {
-                logger.debug("Ignored cancellation while notifying admins");
+                logger.info("Ignored cancellation while notifying admins");
               }
             }
 
-            if (isDebugEnabled) {
-              logger.debug("{}: stopping destroyed entries processor...", this);
-            }
+            logger.info("{}: stopping destroyed entries processor...", this);
             tombstoneService.stop();
 
             // NOTICE: the CloseCache message is the *last* message you can send!
@@ -2370,9 +2358,7 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
 
             if (distributionManager != null) {
               // Send CacheClosedMessage (and NOTHING ELSE) here
-              if (isDebugEnabled) {
-                logger.debug("{}: sending CloseCache to peers...", this);
-              }
+              logger.info("{}: sending CloseCache to peers...", this);
               Set<InternalDistributedMember> otherMembers =
                   distributionManager.getOtherDistributionManagerIds();
               ReplyProcessor21 processor = replyProcessor21Factory.create(system, otherMembers);
@@ -2658,22 +2644,16 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
 
   private void stopServers() {
     boolean isDebugEnabled = logger.isDebugEnabled();
-    if (isDebugEnabled) {
-      logger.debug("{}: stopping cache servers...", this);
-    }
+    logger.info("{}: stopping cache servers...", this);
 
     boolean stoppedCacheServer = false;
 
     for (InternalCacheServer cacheServer : allCacheServers) {
-      if (isDebugEnabled) {
-        logger.debug("stopping bridge {}", cacheServer);
-      }
+      logger.info("stopping bridge {}", cacheServer);
       try {
         cacheServer.stop();
       } catch (CancelException e) {
-        if (isDebugEnabled) {
-          logger.debug("Ignored cache closure while closing bridge {}", cacheServer, e);
-        }
+        logger.info("Ignored cache closure while closing bridge {}", cacheServer, e);
       }
       allCacheServers.remove(cacheServer);
       stoppedCacheServer = true;
@@ -2681,16 +2661,12 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
 
     InternalCacheServer receiverServer = gatewayReceiverServer.getAndSet(null);
     if (receiverServer != null) {
-      if (isDebugEnabled) {
-        logger.debug("stopping gateway receiver server {}", receiverServer);
-      }
+      logger.info("stopping gateway receiver server {}", receiverServer);
       try {
         receiverServer.stop();
       } catch (CancelException e) {
-        if (isDebugEnabled) {
-          logger.debug("Ignored cache closure while closing gateway receiver server {}",
+        logger.info("Ignored cache closure while closing gateway receiver server {}",
               receiverServer, e);
-        }
       }
       stoppedCacheServer = true;
     }
@@ -2702,26 +2678,18 @@ public class GemFireCacheImpl implements InternalCache, InternalClientCache, Has
     }
 
     // stop HA services if they had been started
-    if (isDebugEnabled) {
-      logger.debug("{}: stopping HA services...", this);
-    }
+    logger.info("{}: stopping HA services...", this);
     try {
       HARegionQueue.stopHAServices();
     } catch (CancelException e) {
-      if (isDebugEnabled) {
-        logger.debug("Ignored cache closure while closing HA services", e);
-      }
+      logger.info("Ignored cache closure while closing HA services", e);
     }
 
-    if (isDebugEnabled) {
-      logger.debug("{}: stopping client health monitor...", this);
-    }
+    logger.info("{}: stopping client health monitor...", this);
     try {
       ClientHealthMonitor.shutdownInstance();
     } catch (CancelException e) {
-      if (isDebugEnabled) {
-        logger.debug("Ignored cache closure while closing client health monitor", e);
-      }
+      logger.info("Ignored cache closure while closing client health monitor", e);
     }
 
     // Reset the unique id counter for durable clients. If a durable client stops/starts its cache,

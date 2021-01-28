@@ -18,6 +18,8 @@ import java.util.Set;
 
 import org.apache.logging.log4j.Logger;
 
+import org.apache.geode.ComponentStatus;
+import org.apache.geode.StatusReporter;
 import org.apache.geode.cache.asyncqueue.AsyncEventListener;
 import org.apache.geode.cache.wan.GatewayTransportFilter;
 import org.apache.geode.distributed.DistributedLockService;
@@ -43,7 +45,8 @@ import org.apache.geode.logging.internal.log4j.api.LogService;
 /**
  * @since GemFire 7.0
  */
-public class SerialGatewaySenderImpl extends AbstractRemoteGatewaySender {
+public class SerialGatewaySenderImpl extends AbstractRemoteGatewaySender implements
+    ComponentStatus {
 
   private static final Logger logger = LogService.getLogger();
 
@@ -63,6 +66,7 @@ public class SerialGatewaySenderImpl extends AbstractRemoteGatewaySender {
   }
 
   private void start(boolean cleanQueues) {
+    StatusReporter.registerComponent(this);
     if (logger.isDebugEnabled()) {
       logger.debug("Starting gatewaySender : {}", this);
     }
@@ -110,6 +114,7 @@ public class SerialGatewaySenderImpl extends AbstractRemoteGatewaySender {
       logger
           .info("Started  {}", this);
 
+      status = "Started";
       enqueueTempEvents();
     } finally {
       this.getLifeCycleLock().writeLock().unlock();
@@ -261,5 +266,25 @@ public class SerialGatewaySenderImpl extends AbstractRemoteGatewaySender {
     } else {
       return null;
     }
+  }
+
+  @Override
+  public String name() {
+    return "SerialGatewaySender";
+  }
+
+  private String status = "Started";
+
+  @Override
+  public String getStatusString() {
+    synchronized (this) {
+      return status;
+    }
+  }
+
+  @Override
+  public void print() {
+    String status = getStatusString();
+    System.out.println("Component name: " + name() + " status: " + status + " " + toString());
   }
 }
