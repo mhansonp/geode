@@ -133,6 +133,35 @@ public class TombstoneDUnitTest implements Serializable {
     });
   }
 
+
+  @Test
+  public void testGetOldestTombstoneTimeReplicateForTimestamp() {
+    VM server1 = VM.getVM(0);
+    VM server2 = VM.getVM(1);
+    final int count = 100000;
+    server1.invoke(() -> {
+      createCacheAndRegion(RegionShortcut.REPLICATE_PERSISTENT);
+      for (int i = 0; i < count; i++) {
+        region.put("K" + i, "V" + i);
+      }
+    });
+
+    server2.invoke(() -> createCacheAndRegion(RegionShortcut.REPLICATE));
+
+    server1.invoke(() -> {
+      TombstoneService.TombstoneSweeper tombstoneSweeper =
+          ((InternalCache) cache).getTombstoneService().getSweeper((LocalRegion) region);
+      // Send tombstone gc message to vm1.
+      for (int i = 0; i < count; i++) {
+        region.destroy("K" + i);
+        assertThat(tombstoneSweeper.getOldestTombstoneTime() + 30000 - System.currentTimeMillis()).isGreaterThan(0);
+        performGC(1);
+      }
+
+      assertThat(tombstoneSweeper.getOldestTombstoneTime()).isEqualTo(0);
+    });
+  }
+
   @Test
   public void testGetOldestTombstoneTimeNonReplicate() {
     VM client = VM.getVM(0);
@@ -169,8 +198,8 @@ public class TombstoneDUnitTest implements Serializable {
   }
 
   /**
-   * The purpose of this test is for a replicate region scenario to get the oldest tombstone
-   * and validate that it matches the tombstone of the entry we removed.
+   * The purpose of this test is for a replicate region scenario to get the oldest tombstone and
+   * validate that it matches the tombstone of the entry we removed.
    */
   @Test
   public void testGetOldestTombstoneReplicate() {
@@ -200,9 +229,8 @@ public class TombstoneDUnitTest implements Serializable {
 
 
   /**
-   * The purpose of this test is for a non-replicate region scenario to get the oldest tombstone
-   * and validate that it matches the tombstone of the entry we removed. This is done through a
-   * client
+   * The purpose of this test is for a non-replicate region scenario to get the oldest tombstone and
+   * validate that it matches the tombstone of the entry we removed. This is done through a client
    * as a client is required to have this non-replicate tombstone.
    */
   @Test
