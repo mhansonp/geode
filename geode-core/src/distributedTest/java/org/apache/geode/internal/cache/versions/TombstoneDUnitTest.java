@@ -138,7 +138,7 @@ public class TombstoneDUnitTest implements Serializable {
   public void testGetOldestTombstoneTimeReplicateForTimestamp() {
     VM server1 = VM.getVM(0);
     VM server2 = VM.getVM(1);
-    final int count = 100000;
+    final int count = 10;
     server1.invoke(() -> {
       createCacheAndRegion(RegionShortcut.REPLICATE_PERSISTENT);
       for (int i = 0; i < count; i++) {
