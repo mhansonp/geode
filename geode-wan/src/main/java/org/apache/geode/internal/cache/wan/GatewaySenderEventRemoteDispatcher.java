@@ -18,10 +18,8 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.Vector;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.Logger;
 
@@ -65,9 +63,6 @@ public class GatewaySenderEventRemoteDispatcher implements GatewaySenderEventDis
 
   private ReentrantReadWriteLock connectionLifeCycleLock = new ReentrantReadWriteLock();
 
-  protected static final String maxAttemptsReachedConnectingServerIdExceptionMessage =
-      "Reached max attempts number trying to connect to desired server id";
-
   /*
    * Called after each attempt at processing an outbound (dispatch) or inbound (ack)
    * message, whether the attempt is successful or not. The purpose is testability.
@@ -91,6 +86,7 @@ public class GatewaySenderEventRemoteDispatcher implements GatewaySenderEventDis
   public GatewaySenderEventRemoteDispatcher(AbstractGatewaySenderEventProcessor eventProcessor) {
     this.processor = eventProcessor;
     this.sender = eventProcessor.getSender();
+    // this.ackReaderThread = new AckReaderThread(sender);
     try {
       initializeConnection();
     } catch (GatewaySenderException e) {
@@ -366,70 +362,11 @@ public class GatewaySenderEventRemoteDispatcher implements GatewaySenderEventDis
     }
   }
 
-  Connection retryInitializeConnection(Connection con) {
-    final boolean isDebugEnabled = logger.isDebugEnabled();
-    String connectedServerId = con.getEndpoint().getMemberId().getUniqueId();
-    String expectedServerId = this.processor.getExpectedReceiverUniqueId();
-
-    if (expectedServerId.equals("")) {
-      if (isDebugEnabled) {
-        logger.debug("First dispatcher connected to server " + connectedServerId);
-      }
-      this.processor.setExpectedReceiverUniqueId(connectedServerId);
-      return con;
-    }
-
-    int attempt = 0;
-    final int attemptsPerServer = 5;
-    int maxAttempts = attemptsPerServer;
-    Vector<String> notExpectedServerIds = new Vector<String>();
-    boolean connectedToExpectedReceiver = connectedServerId.equals(expectedServerId);
-    while (!connectedToExpectedReceiver) {
-
-      if (isDebugEnabled) {
-        logger.debug("Dispatcher wants to connect to [" + expectedServerId
-            + "] but got connection to [" + connectedServerId + "]");
-      }
-      attempt++;
-      if (!notExpectedServerIds.contains(connectedServerId)) {
-        if (isDebugEnabled) {
-          logger.debug(
-              "Increasing dispatcher connection max retries number due to connection to unknown server ("
-                  + connectedServerId + ")");
-        }
-        notExpectedServerIds.add(connectedServerId);
-        maxAttempts += attemptsPerServer;
-      }
-
-      if (attempt >= maxAttempts) {
-        throw new ServerConnectivityException(maxAttemptsReachedConnectingServerIdExceptionMessage
-            + " [" + expectedServerId + "] (" + maxAttempts + " attempts).");
-      }
-
-      con.destroy();
-      this.sender.getProxy().returnConnection(con);
-      con = this.sender.getProxy().acquireConnection();
-
-      connectedServerId = con.getEndpoint().getMemberId().getUniqueId();
-      if (connectedServerId.equals(expectedServerId)) {
-        connectedToExpectedReceiver = true;
-      }
-    }
-
-    if (isDebugEnabled) {
-      logger.debug("Dispatcher connected to expected endpoint " + connectedServerId
-          + " after " + attempt + " retries.");
-    }
-    return con;
-  }
-
   /**
    * Initializes the <code>Connection</code>.
    *
    */
-  @VisibleForTesting
   void initializeConnection() throws GatewaySenderException, GemFireSecurityException {
-    final boolean isDebugEnabled = logger.isDebugEnabled();
     if (ackReaderThread != null) {
       ackReaderThread.shutDownAckReaderConnection(connection);
     }
@@ -460,24 +397,26 @@ public class GatewaySenderEventRemoteDispatcher implements GatewaySenderEventDis
           synchronized (this.sender.getLockForConcurrentDispatcher()) {
             ServerLocation server = this.sender.getServerLocation();
             if (server != null) {
-              if (isDebugEnabled) {
+              if (logger.isDebugEnabled()) {
                 logger.debug("ServerLocation is: {}. Connecting to this serverLocation...", server);
               }
               con = this.sender.getProxy().acquireConnection(server);
             } else {
-              if (isDebugEnabled) {
+              if (logger.isDebugEnabled()) {
                 logger.debug("ServerLocation is null. Creating new connection. ");
               }
               con = this.sender.getProxy().acquireConnection();
-            }
-            if (this.sender.getEnforceThreadsConnectSameReceiver()) {
-              con = retryInitializeConnection(con);
-            }
-            if (this.sender.isPrimary()) {
-              if (sender.getServerLocation() == null) {
-                sender.setServerLocation(con.getServer());
+              // Acquired connection from pool!! Update the server location
+              // information in the sender and
+              // distribute the information to other senders ONLY IF THIS SENDER
+              // IS
+              // PRIMARY
+              if (this.sender.isPrimary()) {
+                if (sender.getServerLocation() == null) {
+                  sender.setServerLocation(con.getServer());
+                }
+                new UpdateAttributesProcessor(this.sender).distribute(false);
               }
-              new UpdateAttributesProcessor(this.sender).distribute(false);
             }
           }
         }
@@ -546,12 +485,6 @@ public class GatewaySenderEventRemoteDispatcher implements GatewaySenderEventDis
             String.format(
                 "No available connection was found, but the following active servers exist: %s",
                 buffer.toString());
-      }
-      if (this.sender.getEnforceThreadsConnectSameReceiver() && e.getMessage() != null) {
-        if (Pattern.compile(maxAttemptsReachedConnectingServerIdExceptionMessage + ".*")
-            .matcher(e.getMessage()).find()) {
-          ioMsg += " " + e.getMessage();
-        }
       }
       IOException ex = new IOException(ioMsg);
       gse = new GatewaySenderException(

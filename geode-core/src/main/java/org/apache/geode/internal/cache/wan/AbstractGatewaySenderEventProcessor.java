@@ -154,14 +154,6 @@ public abstract class AbstractGatewaySenderEventProcessor extends LoggingThread
     this.threadMonitoring = tMonitoring;
   }
 
-  public void setExpectedReceiverUniqueId(String uniqueId) {
-    this.sender.setExpectedReceiverUniqueId(uniqueId);
-  }
-
-  public String getExpectedReceiverUniqueId() {
-    return this.sender.getExpectedReceiverUniqueId();
-  }
-
   public Object getRunningStateLock() {
     return runningStateLock;
   }
