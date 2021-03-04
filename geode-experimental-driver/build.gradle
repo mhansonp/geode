@@ -24,12 +24,10 @@ apply from: "${project.projectDir}/../gradle/warnings.gradle"
 dependencies {
   compile(platform(project(':boms:geode-all-bom')))
   compile(project(':geode-common'))
-  compile(project(':geode-protobuf-messages'))
   testImplementation(project(':geode-core'))
   testImplementation(project(':geode-junit')) {
     exclude module: 'geode-core'
   }
-  testImplementation(project(':geode-protobuf'))
   integrationTestImplementation(project(':geode-core'))
   integrationTestImplementation(project(':geode-dunit')) {
     exclude module: 'geode-core'
@@ -37,9 +35,6 @@ dependencies {
   integrationTestImplementation(project(':geode-junit')) {
     exclude module: 'geode-core'
   }
-  integrationTestImplementation(project(':geode-protobuf'))
-
-  implementation('com.google.protobuf:protobuf-java')
 
   testImplementation('com.github.stefanbirkner:system-rules') {
     exclude module: 'junit-dep'

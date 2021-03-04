@@ -51,15 +51,5 @@
       <artifactId>geode-common</artifactId>
       <scope>compile</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.geode</groupId>
-      <artifactId>geode-protobuf-messages</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <scope>runtime</scope>
-    </dependency>
   </dependencies>
 </project>

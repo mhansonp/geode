@@ -38,8 +38,6 @@ def dependentProjectNames = [
   ':geode-lucene',
   ':geode-memcached',
   ':geode-old-client-support',
-  ':geode-protobuf',
-  ':geode-protobuf-messages',
   ':geode-rebalancer',
   ':geode-redis',
   ':geode-serialization',
@@ -589,11 +587,6 @@ distributions {
         from {project(':geode-web-management').configurations.archives.allArtifacts.files}
 
         exclude '*.jar'
-      }
-
-      with copySpec {
-        into('tools/ClientProtocol')
-        from {project(':geode-protobuf-messages').zip.outputs.files}
       }
 
       with copySpec {

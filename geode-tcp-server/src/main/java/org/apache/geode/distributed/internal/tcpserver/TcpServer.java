@@ -339,7 +339,7 @@ public class TcpServer {
         // to contact a cache server
         int firstByte = input.readUnsignedByte();
 
-        boolean handled = protocolChecker.checkProtocol(socket, input, firstByte);
+        boolean handled = false;
 
         if (!handled) {
           if (firstByte == GOSSIP_BYTE) {

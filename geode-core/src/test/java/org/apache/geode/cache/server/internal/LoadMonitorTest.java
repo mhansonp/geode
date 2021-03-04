@@ -14,36 +14,9 @@
  */
 package org.apache.geode.cache.server.internal;
 
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
-import org.junit.Test;
-
-import org.apache.geode.cache.server.ServerLoadProbe;
-import org.apache.geode.internal.cache.tier.CommunicationMode;
 
 public class LoadMonitorTest {
 
-  @Test
-  public void protobufConnectionIsIncludedInLoadMetrics() throws Exception {
-    ServerLoadProbe probe = mock(ServerLoadProbe.class);
-    when(probe.getLoad(any())).thenReturn(null);
-    LoadMonitor loadMonitor = new LoadMonitor(probe, 10000, 0, 0, null);
-    loadMonitor.connectionOpened(true, CommunicationMode.ProtobufClientServerProtocol);
-    assertEquals(1, loadMonitor.metrics.getClientCount());
-    assertEquals(1, loadMonitor.metrics.getConnectionCount());
-  }
 
-  @Test
-  public void protobufConnectionIsRemovedFromLoadMetrics() throws Exception {
-    ServerLoadProbe probe = mock(ServerLoadProbe.class);
-    when(probe.getLoad(any())).thenReturn(null);
-    LoadMonitor loadMonitor = new LoadMonitor(probe, 10000, 0, 0, null);
-    loadMonitor.connectionOpened(true, CommunicationMode.ProtobufClientServerProtocol);
-    loadMonitor.connectionClosed(true, CommunicationMode.ProtobufClientServerProtocol);
-    assertEquals(0, loadMonitor.metrics.getClientCount());
-    assertEquals(0, loadMonitor.metrics.getConnectionCount());
-  }
 }

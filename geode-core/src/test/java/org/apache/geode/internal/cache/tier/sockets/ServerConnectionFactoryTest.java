@@ -15,7 +15,6 @@
 package org.apache.geode.internal.cache.tier.sockets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.quality.Strictness.STRICT_STUBS;
@@ -89,28 +88,6 @@ public class ServerConnectionFactoryTest {
    * Safeguard that we won't create the new client protocol object unless the feature flag is
    * enabled.
    */
-  @Test
-  public void newClientProtocolFailsWithoutSystemPropertySet() {
-    Throwable thrown = catchThrowable(
-        () -> new ServerConnectionFactory().makeServerConnection(mock(Socket.class),
-            cache, cachedRegionHelper, mock(CacheServerStats.class),
-            0, 0, "", CommunicationMode.ProtobufClientServerProtocol.getModeNumber(),
-            mock(AcceptorImpl.class), mock(SecurityService.class)));
-
-    assertThat(thrown).isInstanceOf(IOException.class);
-  }
-
-  @Test
-  public void newClientProtocolFailsWithSystemPropertySet() {
-    System.setProperty("geode.feature-protobuf-protocol", "true");
-    Throwable thrown = catchThrowable(
-        () -> new ServerConnectionFactory().makeServerConnection(mock(Socket.class),
-            cache, cachedRegionHelper, mock(CacheServerStats.class),
-            0, 0, "", CommunicationMode.ProtobufClientServerProtocol.getModeNumber(),
-            mock(AcceptorImpl.class), mock(SecurityService.class)));
-
-    assertThat(thrown).hasRootCauseInstanceOf(ServiceLoadingFailureException.class);
-  }
 
   @Test
   @Parameters({"ClientToServer", "PrimaryServerToClient", "SecondaryServerToClient",
