@@ -2282,35 +2282,41 @@ public class HARegionQueue implements RegionQueue {
                 if (region.getSystem().getConfig().getRemoveUnresponsiveClient()) {
                   isClientSlowReceiver = true;
                 } else {
-                  try {
-                    long logFrequency = CacheClientNotifier.DEFAULT_LOG_FREQUENCY;
-                    CacheClientNotifier ccn = CacheClientNotifier.getInstance();
-                    if (ccn != null) { // check needed for junit tests
-                      logFrequency = ccn.getLogFrequency();
-                    }
-                    if ((this.maxQueueSizeHitCount % logFrequency) == 0) {
-                      logger.warn("Client queue for {} client is full.",
-                          new Object[] {region.getName()});
-                      this.maxQueueSizeHitCount = 0;
-                    }
-                    ++this.maxQueueSizeHitCount;
-                    this.region.checkReadiness(); // fix for bug 37581
-                    // TODO: wait called while holding two locks
-                    this.permitMon.wait(CacheClientNotifier.eventEnqueueWaitTime);
-                    this.region.checkReadiness(); // fix for bug 37581
-                    // Fix for #51400. Allow the queue to grow beyond its
-                    // capacity/maxQueueSize, if it is taking a long time to
-                    // drain the queue, either due to a slower client or the
-                    // deadlock scenario mentioned in the ticket.
-                    reconcilePutPermits();
-                    if ((this.maxQueueSizeHitCount % logFrequency) == 1) {
-                      logger.info("Resuming with processing puts ...");
-                    }
-                  } catch (InterruptedException ex) {
-                    // TODO: The line below is meaningless. Comment it out later
-                    this.permitMon.notifyAll();
-                    throw ex;
+                  // try {
+                  long logFrequency = CacheClientNotifier.DEFAULT_LOG_FREQUENCY;
+                  CacheClientNotifier ccn = CacheClientNotifier.getInstance();
+                  if (ccn != null) { // check needed for junit tests
+                    logFrequency = ccn.getLogFrequency();
                   }
+                  if ((this.maxQueueSizeHitCount % logFrequency) == 0) {
+                    logger.warn("Client queue for {} client is full.",
+                        new Object[] {region.getName()});
+                    this.maxQueueSizeHitCount = 0;
+                  }
+                  ++this.maxQueueSizeHitCount;
+                  this.region.checkReadiness(); // fix for bug 37581
+                  UnsupportedOperationException unsupportedOperationException =
+                      new UnsupportedOperationException(
+                          "MLH: Waiting this.permitMon.wait is not going to happen");
+                  logger.fatal("We had a problem ", unsupportedOperationException);
+                  throw unsupportedOperationException;
+                  // TODO: wait called while holding two locks
+                  // this.permitMon.wait(CacheClientNotifier.eventEnqueueWaitTime);
+                  // this.region.checkReadiness(); // fix for bug 37581
+                  // // Fix for #51400. Allow the queue to grow beyond its
+                  // // capacity/maxQueueSize, if it is taking a long time to
+                  // // drain the queue, either due to a slower client or the
+                  // // deadlock scenario mentioned in the ticket.
+                  // reconcilePutPermits();
+                  // if ((this.maxQueueSizeHitCount % logFrequency) == 1) {
+                  // logger.info("Resuming with processing puts ...");
+                  // }
+                  // }
+                  // catch (InterruptedException ex) {
+                  // // TODO: The line below is meaningless. Comment it out later
+                  // this.permitMon.notifyAll();
+                  // throw ex;
+                  // }
                 }
               }
             } // synchronized (this.permitMon)
