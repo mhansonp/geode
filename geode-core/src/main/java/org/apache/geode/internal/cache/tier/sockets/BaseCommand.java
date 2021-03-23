@@ -1194,6 +1194,7 @@ public abstract class BaseCommand implements Command {
   public static void appendNewRegisterInterestResponseChunkFromLocal(LocalRegion region,
       VersionedObjectList values, Object riKeys, Set<?> keySet, ServerConnection servConn)
       throws IOException {
+    logger.info("MLH BaseCommand.appendNewRegisterInterestResponseChunkFromLocal entered");
     ClientProxyMembershipID requestingClient = servConn == null ? null : servConn.getProxyID();
     for (Object key : keySet) {
       VersionTagHolder versionHolder = createVersionTagHolder();
@@ -1205,11 +1206,16 @@ public abstract class BaseCommand implements Command {
       if (values.size() == MAXIMUM_CHUNK_SIZE) {
         // Send the chunk and clear the list
         // values.setKeys(null); // Now we need to send keys too.
+        logger.info("MLH BaseCommand.appendNewRegisterInterestResponseChunkFromLocal region = "
+            + region + " keys "
+            + (riKeys != null ? riKeys : "ALL_KEYS"));
         sendNewRegisterInterestResponseChunk(region, riKeys != null ? riKeys : "ALL_KEYS", values,
             false, servConn);
         values.clear();
       }
     } // for
+    logger.info("MLH BaseCommand.appendNewRegisterInterestResponseChunkFromLocal finished");
+
   }
 
   public static void appendNewRegisterInterestResponseChunk(LocalRegion region,

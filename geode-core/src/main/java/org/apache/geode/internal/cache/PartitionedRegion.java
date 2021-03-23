@@ -4536,6 +4536,7 @@ public class PartitionedRegion extends LocalRegion
    */
   public void fetchEntries(HashMap<Integer, HashSet<Object>> bucketKeys, VersionedObjectList values,
       ServerConnection servConn) throws IOException {
+    logger.info("MLH fetchEntries - hashmap -  finished");
     int retryAttempts = calcRetry();
     RetryTimeKeeper retryTime = null;
     HashMap<Integer, HashSet> failures = new HashMap<Integer, HashSet>(bucketKeys);
@@ -4543,6 +4544,7 @@ public class PartitionedRegion extends LocalRegion
         new HashMap<InternalDistributedMember, HashMap<Integer, HashSet>>();
 
     while (--retryAttempts >= 0 && !failures.isEmpty()) {
+      logger.info("MLH fetchEntries - hashmap -  retry attempts" + retryAttempts);
       nodeToBuckets.clear();
       updateNodeToBucketMap(nodeToBuckets, failures);
       failures.clear();
@@ -4559,17 +4561,17 @@ public class PartitionedRegion extends LocalRegion
         }
       }
 
-      // Handle old nodes for Rolling Upgrade support
-      Set<Integer> failedSet = handleOldNodes(nodeToBuckets, values, servConn);
-      // Add failed buckets to nodeToBuckets map so that these will be tried on
-      // remote nodes.
-      if (!failedSet.isEmpty()) {
-        for (Integer bId : failedSet) {
-          failures.put(bId, bucketKeys.get(bId));
-        }
-        updateNodeToBucketMap(nodeToBuckets, failures);
-        failures.clear();
-      }
+      // // Handle old nodes for Rolling Upgrade support
+      // Set<Integer> failedSet = handleOldNodes(nodeToBuckets, values, servConn);
+      // // Add failed buckets to nodeToBuckets map so that these will be tried on
+      // // remote nodes.
+      // if (!failedSet.isEmpty()) {
+      // for (Integer bId : failedSet) {
+      // failures.put(bId, bucketKeys.get(bId));
+      // }
+      // updateNodeToBucketMap(nodeToBuckets, failures);
+      // failures.clear();
+      // }
 
       fetchRemoteEntries(nodeToBuckets, failures, values, servConn);
       if (!failures.isEmpty()) {
@@ -4585,6 +4587,7 @@ public class PartitionedRegion extends LocalRegion
       throw new InternalGemFireException("Failed to fetch entries from " + failures.size()
           + " buckets of region " + getName() + " for register interest.");
     }
+    logger.info("MLH fetchEntries - hashmap -  finished");
   }
 
   void updateNodeToBucketMap(
@@ -4713,8 +4716,10 @@ public class PartitionedRegion extends LocalRegion
     HashSet<Integer> failures = new HashSet<Integer>(getRegionAdvisor().getBucketSet());
     HashMap<InternalDistributedMember, HashSet<Integer>> nodeToBuckets =
         new HashMap<InternalDistributedMember, HashSet<Integer>>();
+    logger.info("MLH fetchEntries - string -  entered");
 
     while (--retryAttempts >= 0 && !failures.isEmpty()) {
+      logger.info("MLH fetchEntries - string -  retry attempts" + retryAttempts);
       nodeToBuckets.clear();
       updateNodeToBucketMap(nodeToBuckets, failures);
       failures.clear();
@@ -4735,13 +4740,13 @@ public class PartitionedRegion extends LocalRegion
       updateNodeToBucketMap(nodeToBuckets, failures);
       failures.clear();
 
-      // Handle old nodes for Rolling Upgrade support
-      Set<Integer> ret = handleOldNodes(nodeToBuckets, values, servConn);
-      if (!ret.isEmpty()) {
-        failures.addAll(ret);
-        updateNodeToBucketMap(nodeToBuckets, failures);
-        failures.clear();
-      }
+      // // Handle old nodes for Rolling Upgrade support
+      // Set<Integer> ret = handleOldNodes(nodeToBuckets, values, servConn);
+      // if (!ret.isEmpty()) {
+      // failures.addAll(ret);
+      // updateNodeToBucketMap(nodeToBuckets, failures);
+      // failures.clear();
+      // }
 
       localBuckets = nodeToBuckets.remove(getMyId());
       if (localBuckets != null && !localBuckets.isEmpty()) {
@@ -4764,6 +4769,7 @@ public class PartitionedRegion extends LocalRegion
       throw new InternalGemFireException("Failed to fetch entries from " + failures.size()
           + " buckets of region " + getName() + " for register interest.");
     }
+    logger.info("MLH fetchEntries - string -  finished");
   }
 
   void updateNodeToBucketMap(
@@ -4817,6 +4823,8 @@ public class PartitionedRegion extends LocalRegion
       HashMap<InternalDistributedMember, HashMap<Integer, HashSet>> nodeToBuckets,
       HashMap<Integer, HashSet> failures, VersionedObjectList values, ServerConnection servConn)
       throws IOException {
+    logger.info("MLH PartitionedRegion.fetchRemoteEntries: entered");
+
     Set result = null;
     HashMap<Integer, HashSet> oneBucketKeys = new HashMap<Integer, HashSet>();
 
@@ -4850,6 +4858,7 @@ public class PartitionedRegion extends LocalRegion
           for (BucketDump bd : bds) {
             result.addAll(bd.getValuesWithVersions().entrySet());
           }
+          logger.info("MLH PartitionedRegion.fetchRemoteEntries: result size =  " + result.size());
 
           BaseCommand.appendNewRegisterInterestResponseChunk(this, values, "keyList", result,
               servConn);
@@ -4859,6 +4868,7 @@ public class PartitionedRegion extends LocalRegion
         }
       }
     }
+    logger.info("MLH PartitionedRegion.fetchRemoteEntries: finished");
   }
 
   /**
