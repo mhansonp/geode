@@ -1076,7 +1076,7 @@ public class CacheClientNotifier {
       ClientProxyMembershipID membershipID, int interestType, boolean isDurable,
       boolean sendUpdatesAsInvalidates, boolean manageEmptyRegions, int regionDataPolicy,
       boolean flushState) throws IOException, RegionDestroyedException {
-
+    logger.info("MLH CacheClientNotifier.registerClientInterest - object - entered");
     CacheClientProxy proxy = getClientProxy(membershipID, true);
 
     if (logger.isDebugEnabled()) {
@@ -1107,6 +1107,8 @@ public class CacheClientNotifier {
         proxy.unregisterClientInterest(regionName, keyOfInterest, interestType, false);
       }
     }
+    logger.info("MLH CacheClientNotifier.registerClientInterest - object - finished");
+
   }
 
   /**
@@ -1161,6 +1163,7 @@ public class CacheClientNotifier {
       boolean manageEmptyRegions, int regionDataPolicy, boolean flushState)
       throws IOException, RegionDestroyedException {
     CacheClientProxy proxy = getClientProxy(membershipID, true);
+    logger.info("MLH CacheClientNotifier.registerClientInterest - list - entered");
 
     if (logger.isDebugEnabled()) {
       logger.debug("CacheClientNotifier: Client {} registering interest in: {} -> {}", proxy,
@@ -1178,6 +1181,8 @@ public class CacheClientNotifier {
     if (manageEmptyRegions) {
       updateMapOfEmptyRegions(proxy.getRegionsWithEmptyDataPolicy(), regionName, regionDataPolicy);
     }
+    logger.info("MLH CacheClientNotifier.registerClientInterest - list - finished");
+
   }
 
   /**
