@@ -1195,12 +1195,10 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
         // defer the lruUpdateCallback to prevent a deadlock
         final boolean disabled = entries.disableLruUpdateCallback();
         try {
-          synchronized (regionEntry) {
-            // value & version must be obtained atomically
-            clientEvent.setVersionTag(regionEntry.getVersionStamp().asVersionTag());
-            value = getDeserialized(regionEntry, updateStats, disableCopyOnRead,
-                preferCachedDeserializable, retainResult);
-          }
+          // value & version must be obtained atomically
+          clientEvent.setVersionTag(regionEntry.getVersionStamp().asVersionTag());
+          value = getDeserialized(regionEntry, updateStats, disableCopyOnRead,
+              preferCachedDeserializable, retainResult);
         } finally {
           if (disabled) {
             entries.enableLruUpdateCallback();
