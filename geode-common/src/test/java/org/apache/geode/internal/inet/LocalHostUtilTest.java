@@ -30,6 +30,7 @@ public class LocalHostUtilTest {
       if(address instanceof Inet6Address) {
         System.out.println("address " + address + " is an IPv6 address ");
         Inet6Address inet6Address = (Inet6Address) address;
+        assertThat(inet6Address.isLoopbackAddress()).isFalse();
         assertThat(inet6Address.getHostAddress().contains("%lo")).isFalse();
       }
     }
