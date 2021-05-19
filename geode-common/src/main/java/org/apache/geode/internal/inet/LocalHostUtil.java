@@ -143,8 +143,11 @@ public class LocalHostUtil {
     Set<InetAddress> result = new HashSet<>();
     Set<InetAddress> locals = new HashSet<>();
     Enumeration<NetworkInterface> interfaces;
+    System.out.println("MLH getMyAddresses entered");
     try {
       interfaces = NetworkInterface.getNetworkInterfaces();
+      System.out.println("MLH getMyAddresses interfaces" + interfaces);
+
     } catch (SocketException e) {
       throw new IllegalArgumentException(
           "Unable to examine network interfaces",
@@ -160,12 +163,17 @@ public class LocalHostUtil {
       }
       if (faceIsUp) {
         Enumeration<InetAddress> addrs = face.getInetAddresses();
+        System.out.println("MLH getMyAddresses addrs" + addrs);
+
         while (addrs.hasMoreElements()) {
           InetAddress addr = addrs.nextElement();
           if (addr.isLoopbackAddress() || addr.isAnyLocalAddress()
               || (!useLinkLocalAddresses && addr.isLinkLocalAddress())) {
+            System.out.println("MLH getMyAddresses adding to local addrs" + addr);
+
             locals.add(addr);
           } else {
+            System.out.println("MLH getMyAddresses adding to result addrs" + addr);
             result.add(addr);
           }
         } // while
