@@ -22,6 +22,7 @@ public class LocalHostUtilTest {
     System.out.println("My addresses = " + LocalHostUtil.getMyAddresses());
     Set<InetAddress> myAddresses =  LocalHostUtil.getMyAddresses();
     for (InetAddress address : myAddresses) {
+      System.out.println("address = " + address);
       assertThat(address.isAnyLocalAddress()).isFalse();
       assertThat(address.isLinkLocalAddress()).isFalse();
       assertThat(address.isLoopbackAddress()).isFalse();
