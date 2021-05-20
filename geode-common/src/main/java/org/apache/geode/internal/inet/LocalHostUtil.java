@@ -268,6 +268,7 @@ public class LocalHostUtil {
           Inet6Address inet6Address = (Inet6Address) inetAddress;
           try {
             if (inet6Address.getScopedInterface().isLoopback()) {
+              System.out.println("Returning try for inet6Address" + inet6Address);
               return true;
             }
           } catch (SocketException ignored) {
