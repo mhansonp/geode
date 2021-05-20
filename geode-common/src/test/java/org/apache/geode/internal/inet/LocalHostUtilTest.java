@@ -44,7 +44,7 @@ public class LocalHostUtilTest {
       if (address instanceof Inet6Address) {
         Inet6Address inet6Address = (Inet6Address) address;
         if(inet6Address.getHostAddress().contains("%lo")) {
-          assertThat(LocalHostUtil.isLocalHost(inet6Address)).isFalse();
+          assertThat(LocalHostUtil.isLocalHost(inet6Address)).isTrue();
         } else {
           assertThat(inet6Address.getHostAddress().contains("%lo")).isFalse();
         }
