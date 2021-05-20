@@ -263,6 +263,15 @@ public class LocalHostUtil {
       } else if (inetAddress.isAnyLocalAddress()) {
         return true;
       } else {
+        if(inetAddress instanceof  Inet6Address) {
+          Inet6Address inet6Address = (Inet6Address)  inetAddress;
+          try {
+            if(inet6Address.getScopedInterface().isLoopback()) {
+              return true;
+            }
+          } catch (SocketException ignored) {
+          }
+        }
         try {
           Enumeration en = NetworkInterface.getNetworkInterfaces();
           while (en.hasMoreElements()) {
