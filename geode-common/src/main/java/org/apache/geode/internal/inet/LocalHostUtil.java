@@ -167,7 +167,7 @@ public class LocalHostUtil {
 
         while (addrs.hasMoreElements()) {
           InetAddress addr = addrs.nextElement();
-          if (addr.isLoopbackAddress() || addr.isAnyLocalAddress() || addr.getHostAddress().contains("%lo")
+          if (addr.isLoopbackAddress() || addr.isAnyLocalAddress() //|| addr.getHostAddress().contains("%lo")
               || (!useLinkLocalAddresses && addr.isLinkLocalAddress() )) {
             System.out.println("MLH getMyAddresses adding to local addrs" + addr);
 

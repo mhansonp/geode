@@ -1,9 +1,11 @@
 package org.apache.geode.internal.inet;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.in;
 
 import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.util.Set;
 
 import org.junit.Before;
@@ -18,18 +20,15 @@ public class LocalHostUtilTest {
   }
 
   @Test
-  public void testGetMyAddresses() {
-    System.out.println("My addresses = " + LocalHostUtil.getMyAddresses());
+  public void testGetMyAddresses() throws SocketException {
     Set<InetAddress> myAddresses =  LocalHostUtil.getMyAddresses();
     for (InetAddress address : myAddresses) {
-      System.out.println("address = " + address);
       assertThat(address.isAnyLocalAddress()).isFalse();
       assertThat(address.isLinkLocalAddress()).isFalse();
       assertThat(address.isLoopbackAddress()).isFalse();
       if(address instanceof Inet6Address) {
-        System.out.println("address " + address + " is an IPv6 address ");
         Inet6Address inet6Address = (Inet6Address) address;
-        assertThat(inet6Address.isLoopbackAddress()).isFalse();
+        assertThat(inet6Address.getScopedInterface().isLoopback()).isFalse();
         assertThat(inet6Address.getHostAddress().contains("%lo")).isFalse();
       }
     }
