@@ -167,8 +167,9 @@ public class LocalHostUtil {
 
         while (addrs.hasMoreElements()) {
           InetAddress addr = addrs.nextElement();
-          if (addr.isLoopbackAddress() || addr.isAnyLocalAddress() //|| addr.getHostAddress().contains("%lo")
-              || (!useLinkLocalAddresses && addr.isLinkLocalAddress() )) {
+          if (addr.isLoopbackAddress() || addr.isAnyLocalAddress() // ||
+                                                                   // addr.getHostAddress().contains("%lo")
+              || (!useLinkLocalAddresses && addr.isLinkLocalAddress())) {
             System.out.println("MLH getMyAddresses adding to local addrs" + addr);
 
             locals.add(addr);
@@ -263,10 +264,10 @@ public class LocalHostUtil {
       } else if (inetAddress.isAnyLocalAddress()) {
         return true;
       } else {
-        if(inetAddress instanceof  Inet6Address) {
-          Inet6Address inet6Address = (Inet6Address)  inetAddress;
+        if (inetAddress instanceof Inet6Address) {
+          Inet6Address inet6Address = (Inet6Address) inetAddress;
           try {
-            if(inet6Address.getScopedInterface().isLoopback()) {
+            if (inet6Address.getScopedInterface().isLoopback()) {
               return true;
             }
           } catch (SocketException ignored) {
