@@ -258,17 +258,23 @@ public class LocalHostUtil {
     if (host instanceof InetAddress) {
       InetAddress inetAddress = (InetAddress) host;
       if (isLocalHost(inetAddress)) {
+        System.out.println("isLocalHost 1 Returning true for inetAddress" + inetAddress);
+
         return true;
       } else if (inetAddress.isLoopbackAddress()) {
+        System.out.println("isLocalHost 2 Returning true for inetAddress" + inetAddress);
+
         return true;
       } else if (inetAddress.isAnyLocalAddress()) {
+        System.out.println("isLocalHost 3 Returning true for inetAddress" + inetAddress);
+
         return true;
       } else {
         if (inetAddress instanceof Inet6Address) {
           Inet6Address inet6Address = (Inet6Address) inetAddress;
           try {
             if (inet6Address.getScopedInterface().isLoopback()) {
-              System.out.println("Returning try for inet6Address" + inet6Address);
+              System.out.println("isLocalHost 4 Returning true for inetAddress" + inetAddress);
               return true;
             }
           } catch (SocketException ignored) {
@@ -281,6 +287,8 @@ public class LocalHostUtil {
             for (Enumeration en2 = i.getInetAddresses(); en2.hasMoreElements();) {
               InetAddress addr = (InetAddress) en2.nextElement();
               if (inetAddress.equals(addr)) {
+                System.out.println("isLocalHost 5 Returning true for inetAddress" + inetAddress);
+
                 return true;
               }
             }
@@ -291,6 +299,8 @@ public class LocalHostUtil {
         }
       }
     } else {
+      System.out.println("isLocalHost 6 Returning true for host" + host);
+
       return isLocalHost((Object) toInetAddress(host.toString()));
     }
   }
