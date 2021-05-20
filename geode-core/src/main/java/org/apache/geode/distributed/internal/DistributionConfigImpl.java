@@ -85,6 +85,7 @@ import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.logging.log4j.Logger;
 
 import org.apache.geode.GemFireConfigException;
 import org.apache.geode.GemFireIOException;
@@ -95,6 +96,7 @@ import org.apache.geode.internal.inet.LocalHostUtil;
 import org.apache.geode.internal.logging.LogWriterImpl;
 import org.apache.geode.internal.process.ProcessLauncherContext;
 import org.apache.geode.internal.security.SecurableCommunicationChannel;
+import org.apache.geode.logging.internal.log4j.api.LogService;
 import org.apache.geode.security.AuthTokenEnabledComponents;
 import org.apache.geode.util.internal.GeodeGlossary;
 
@@ -951,10 +953,14 @@ public class DistributionConfigImpl extends AbstractDistributionConfig implement
   public DistributionConfigImpl(Properties nonDefault, boolean ignoreGemFirePropsFile,
       boolean isConnected) {
     Map<Object, Object> props = new HashMap<>();
+    Logger logger = LogService.getLogger();
+    logger.info("MLH DistributionConfigImpl nonDefault properties" + nonDefault);
     if (!ignoreGemFirePropsFile) {// For admin bug #40434
       props.putAll(loadPropertiesFromURL(DistributedSystem.getPropertyFileURL(), false));
     }
     props.putAll(loadPropertiesFromURL(DistributedSystem.getSecurityPropertiesFileURL(), true));
+    logger.info("MLH DistributionConfigImpl props =  " + props);
+
 
     // Now override values picked up from the file with values passed
     // in from the caller's code
@@ -962,6 +968,7 @@ public class DistributionConfigImpl extends AbstractDistributionConfig implement
       props.putAll(nonDefault);
       setSource(nonDefault, ConfigSource.api());
     }
+
     // Now remove all user defined properties from props.
     for (Object entry : props.entrySet()) {
       Map.Entry<String, String> ent = (Map.Entry<String, String>) entry;
@@ -969,6 +976,9 @@ public class DistributionConfigImpl extends AbstractDistributionConfig implement
         userDefinedProps.put(ent.getKey(), ent.getValue());
       }
     }
+
+    logger.info("MLH DistributionConfigImpl userDefinedProps =  " + userDefinedProps);
+
     // Now override values picked up from the file or code with values
     // from the system properties.
     String[] attNames = getAttributeNames();
@@ -993,6 +1003,7 @@ public class DistributionConfigImpl extends AbstractDistributionConfig implement
         }
       }
     }
+    logger.info("MLH DistributionConfigImpl 4 props =  " + props);
 
     final Properties overriddenDefaults = ProcessLauncherContext.getOverriddenDefaults();
     if (!overriddenDefaults.isEmpty()) {
@@ -1006,6 +1017,7 @@ public class DistributionConfigImpl extends AbstractDistributionConfig implement
         }
       }
     }
+    logger.info("MLH DistributionConfigImpl 5 props =  " + props);
 
     initialize(props);
 

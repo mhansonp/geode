@@ -339,6 +339,7 @@ public abstract class AbstractDistributionConfig extends AbstractConfig
 
   @ConfigAttributeChecker(name = SERVER_BIND_ADDRESS)
   protected String checkServerBindAddress(String value) {
+    logger.info("checkServerBindAddress stack is " + new Exception("MLH stack trace"));
     if (value != null && value.length() > 0 && !LocalHostUtil.isLocalHost(value)) {
       throw new IllegalArgumentException(
           String.format(
