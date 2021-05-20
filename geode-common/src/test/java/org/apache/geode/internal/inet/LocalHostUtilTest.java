@@ -56,7 +56,6 @@ public class LocalHostUtilTest {
       if (address instanceof Inet6Address) {
         System.err.println("************ Address that is being checked " + address);
         Inet6Address inet6Address = (Inet6Address) address;
-        assertThat(LocalHostUtil.isLocalHost(inet6Address)).isFalse();
         assertThat(inet6Address.getHostAddress().contains("%lo")).isFalse();
         System.err.println("************ Address that is good is " + address);
       }
