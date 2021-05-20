@@ -287,7 +287,8 @@ public class LocalHostUtil {
             for (Enumeration en2 = i.getInetAddresses(); en2.hasMoreElements();) {
               InetAddress addr = (InetAddress) en2.nextElement();
               if (inetAddress.equals(addr)) {
-                System.out.println("isLocalHost 5 Returning true for inetAddress" + inetAddress);
+                System.out.println("isLocalHost 5 Returning true for inetAddress" + inetAddress
+                    + " addr = " + addr);
 
                 return true;
               }
