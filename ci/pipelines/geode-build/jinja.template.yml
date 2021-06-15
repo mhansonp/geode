@@ -259,7 +259,7 @@ jobs:
 {% endfor %}
 - name: {{build_test.name}}
   public: true
-  max_in_flight: {{build_test.MAX_IN_FLIGHT}}
+  max_in_flight: 5
   plan:
   - in_parallel:
     - get: geode-ci
