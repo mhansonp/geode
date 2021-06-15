@@ -74,7 +74,7 @@ if [[ "${CONCOURSE_HOST}" == "concourse.apachegeode-ci.info" ]]; then
   CONCOURSE_SCHEME=https
 fi
 CONCOURSE_URL=${CONCOURSE_SCHEME:-"http"}://${CONCOURSE_HOST}
-FLY_TARGET=${CONCOURSE_HOST}-${CONCOURSE_TEAM}
+FLY_TARGET="geode"
 
 . ${SCRIPTDIR}/../shared/utilities.sh
 SANITIZED_GEODE_BRANCH=$(getSanitizedBranch ${GEODE_BRANCH})
@@ -117,7 +117,7 @@ YML
   fi
 
   FLY_URL="${CONCOURSE_URL}/api/v1/cli?arch=amd64&platform=${platform}"
-  FLY="${SCRIPTDIR}/fly"
+  FLY="fly"
   if [[ ! -e "${FLY}" ]]; then
     curl -so ${FLY} ${FLY_URL}
   fi
