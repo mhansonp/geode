@@ -2298,6 +2298,7 @@ public class HARegionQueue implements RegionQueue {
         if (Thread.interrupted()) {
           throw new InterruptedException();
         }
+        long millisToWait = System.currentTimeMillis();
         synchronized (this.putGuard) {
           if (putPermits <= 0) {
             synchronized (this.permitMon) {
@@ -2319,7 +2320,8 @@ public class HARegionQueue implements RegionQueue {
                     ++this.maxQueueSizeHitCount;
                     this.region.checkReadiness(); // fix for bug 37581
                     // TODO: wait called while holding two locks
-                    this.permitMon.wait(CacheClientNotifier.eventEnqueueWaitTime);
+                    millisToWait = CacheClientNotifier.eventEnqueueWaitTime - millisToWait;
+                    this.permitMon.wait(millisToWait);
                     this.region.checkReadiness(); // fix for bug 37581
                     // Fix for #51400. Allow the queue to grow beyond its
                     // capacity/maxQueueSize, if it is taking a long time to
