@@ -303,14 +303,11 @@ public class InitialImageOperation {
       // GII is happening and is not part of the GII result.
       if (region instanceof HARegion) {
         try {
-          // HARegion r = (HARegion)region;
-          // if (!r.isPrimaryQueue()) {
           if (!this.requestFilterInfo(recipient)) {
             if (isDebugEnabled) {
               logger.debug("Failed to receive interest and CQ information from {}", recipient);
             }
           }
-          // }
         } catch (Exception ex) {
           if (!itr.hasNext()) {
             if (isDebugEnabled) {

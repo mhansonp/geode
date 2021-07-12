@@ -1363,13 +1363,6 @@ public class PartitionedRegionDataStore implements HasCachePerfStats {
       checkRegionDestroyedOnBucket(bucketRegion, event.isOriginRemote(), rde);
     }
 
-    // this is done elsewhere now
-    // event.setRegion(this.partitionedRegion);
-    // this.partitionedRegion.notifyBridgeClients(EnumListenerEvent.AFTER_DESTROY,
-    // event);
-    // this.partitionedRegion.notifyGatewayHub(EnumListenerEvent.AFTER_DESTROY,
-    // event);
-
     return obj;
   }
 
@@ -2258,16 +2251,7 @@ public class PartitionedRegionDataStore implements HasCachePerfStats {
     } catch (RegionDestroyedException rde) {
       checkRegionDestroyedOnBucket(bucketRegion, event.isOriginRemote(), rde);
     }
-
-
     return result;
-
-    // this is now done elsewhere
-    // event.setRegion(this.partitionedRegion);
-    // this.partitionedRegion.notifyBridgeClients(EnumListenerEvent.AFTER_CREATE,
-    // event);
-    // this.partitionedRegion.notifyGatewayHub(EnumListenerEvent.AFTER_CREATE,
-    // event);
   }
 
   /**

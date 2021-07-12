@@ -977,11 +977,8 @@ public class HARegionQueue implements RegionQueue {
     Object key = event.getKey();
     if (key instanceof ThreadIdentifier) {
       // Check if the sequenceID present as value against this key is same
-      // as
-      // the last dispatched sequence & the size of set containing the
-      // counters
-      // is 0. If yes the Dace should be removed
-      // Get DACE
+      // as the last dispatched sequence & the size of set containing the
+      // counters is 0. If yes the Dace should be removed Get DACE
 
       DispatchedAndCurrentEvents dace =
           (DispatchedAndCurrentEvents) HARegionQueue.this.eventsMap.get(key);

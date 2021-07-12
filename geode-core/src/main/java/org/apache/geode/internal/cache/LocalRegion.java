@@ -6416,9 +6416,7 @@ public class LocalRegion extends AbstractRegion implements LoaderHelperFactory,
         getVersionVector().recordVersion((InternalDistributedMember) event.getDistributedMember(),
             event.getVersionTag());
       }
-      // When client retried and returned with hasSeenEvent for both LR and DR,
-      // the server should still
-      // notifyGatewayHubs even the event could be duplicated in gateway queues1
+
       notifyGatewaySender(EnumListenerEvent.AFTER_DESTROY, event);
       return;
     }
