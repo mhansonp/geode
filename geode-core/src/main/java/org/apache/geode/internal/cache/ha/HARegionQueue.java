@@ -2252,46 +2252,48 @@ public class HARegionQueue implements RegionQueue {
         synchronized (this.putGuard) {
           if (putPermits <= 0) {
             synchronized (this.permitMon) {
-              if (reconcilePutPermits() <= 0) {
-                if (region.getSystem().getConfig().getRemoveUnresponsiveClient()) {
-                  isClientSlowReceiver = true;
-                } else {
-                  try {
-                    long logFrequency = CacheClientNotifier.DEFAULT_LOG_FREQUENCY;
-                    CacheClientNotifier ccn = CacheClientNotifier.getInstance();
-                    if (ccn != null) { // check needed for junit tests
-                      logFrequency = ccn.getLogFrequency();
-                    }
-                    if ((this.maxQueueSizeHitCount % logFrequency) == 0) {
-                      logger.warn("Client queue for {} client is full.",
-                          new Object[] {region.getName()});
-                      this.maxQueueSizeHitCount = 0;
-                    }
-                    ++this.maxQueueSizeHitCount;
-                    this.region.checkReadiness(); // fix for bug 37581
-                    // TODO: wait called while holding two locks
-                    millisToWait = CacheClientNotifier.eventEnqueueWaitTime - millisToWait;
-                    this.permitMon.wait(millisToWait);
-                    this.region.checkReadiness(); // fix for bug 37581
-                    // Fix for #51400. Allow the queue to grow beyond its
-                    // capacity/maxQueueSize, if it is taking a long time to
-                    // drain the queue, either due to a slower client or the
-                    // deadlock scenario mentioned in the ticket.
-                    reconcilePutPermits();
-                    if ((this.maxQueueSizeHitCount % logFrequency) == 1) {
-                      logger.info("Resuming with processing puts ...");
-                    }
-                  } catch (InterruptedException ex) {
-                    // TODO: The line below is meaningless. Comment it out later
-                    this.permitMon.notifyAll();
-                    throw ex;
-                  }
-                }
-              }
+              checkQueueSizeConstraint(millisToWait);
             } // synchronized (this.permitMon)
           } // if (putPermits <= 0)
           --putPermits;
         } // synchronized (this.putGuard)
+      }
+    }
+
+    /* Do not call this method directly from anywhere except checkQueueSizeConstraint */
+    private void checkQueueSizeConstraint(long millisToWait) throws InterruptedException {
+      if (reconcilePutPermits() <= 0) {
+        if (region.getSystem().getConfig().getRemoveUnresponsiveClient()) {
+          isClientSlowReceiver = true;
+        } else {
+          try {
+            long logFrequency = CacheClientNotifier.DEFAULT_LOG_FREQUENCY;
+            CacheClientNotifier ccn = CacheClientNotifier.getInstance();
+            if (ccn != null) { // check needed for junit tests
+              logFrequency = ccn.getLogFrequency();
+            }
+            if ((this.maxQueueSizeHitCount % logFrequency) == 0) {
+              logger.warn("Client queue for {} client is full.",
+                  new Object[] {region.getName()});
+              this.maxQueueSizeHitCount = 0;
+            }
+            ++this.maxQueueSizeHitCount;
+            this.region.checkReadiness();
+            // TODO: wait called while holding two locks
+            millisToWait = CacheClientNotifier.eventEnqueueWaitTime - millisToWait;
+            this.permitMon.wait(millisToWait);
+            this.region.checkReadiness();
+
+            reconcilePutPermits();
+            if ((this.maxQueueSizeHitCount % logFrequency) == 1) {
+              logger.info("Resuming with processing puts ...");
+            }
+          } catch (InterruptedException ex) {
+            // TODO: The line below is meaningless. Comment it out later
+            this.permitMon.notifyAll();
+            throw ex;
+          }
+        }
       }
     }
 
