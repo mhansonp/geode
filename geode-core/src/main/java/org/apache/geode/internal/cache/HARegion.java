@@ -174,15 +174,9 @@ public class HARegion extends DistributedRegion {
     if (key instanceof Long) {
       boolean removedFromAvID;
       Conflatable conflatable;
-      try {
-        conflatable = (Conflatable) this.get(key);
-        removedFromAvID =
-            !this.owningQueue.isPrimary() && this.owningQueue.destroyFromAvailableIDs((Long) key);
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
-        getCancelCriterion().checkCancelInProgress(ie);
-        return;
-      }
+      conflatable = (Conflatable) this.get(key);
+      removedFromAvID =
+          !this.owningQueue.isPrimary() && this.owningQueue.destroyFromAvailableIDs((Long) key);
       if (!removedFromAvID) {
         return;
       }

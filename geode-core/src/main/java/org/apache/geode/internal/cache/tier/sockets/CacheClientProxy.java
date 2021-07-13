@@ -2459,16 +2459,12 @@ public class CacheClientProxy implements ClientSession {
             // This will reduce the number of duplicates that a client receives after
             // reconnecting.
             synchronized (_pausedLock) {
-              try {
-                logger.info("available ids = " + this._messageQueue.size() + " , isEmptyAckList ="
-                    + this._messageQueue.isEmptyAckList() + ", peekInitialized = "
-                    + this._messageQueue.isPeekInitialized());
-                while (!this._messageQueue.isEmptyAckList()
-                    && this._messageQueue.isPeekInitialized()) {
-                  this._messageQueue.remove();
-                }
-              } catch (InterruptedException ex) {
-                logger.warn("{}: sleep interrupted.", this);
+              logger.info("available ids = " + this._messageQueue.size() + " , isEmptyAckList ="
+                  + this._messageQueue.isEmptyAckList() + ", peekInitialized = "
+                  + this._messageQueue.isPeekInitialized());
+              while (!this._messageQueue.isEmptyAckList()
+                  && this._messageQueue.isPeekInitialized()) {
+                this._messageQueue.remove();
               }
             }
             waitForResumption();
@@ -2498,8 +2494,6 @@ public class CacheClientProxy implements ClientSession {
             this._messageQueue.remove();
           }
           clientMessage = null;
-        } catch (MessageTooLargeException e) {
-          logger.warn("Message too large to send to client: {}, {}", clientMessage, e.getMessage());
         } catch (IOException e) {
           // Added the synchronization below to ensure that exception handling
           // does not occur while stopping the dispatcher and vice versa.
@@ -2857,11 +2851,7 @@ public class CacheClientProxy implements ClientSession {
 
     protected void initializeTransients() {
       while (!this._messageQueue.isEmptyAckList() && this._messageQueue.isPeekInitialized()) {
-        try {
-          this._messageQueue.remove();
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-        }
+        this._messageQueue.remove();
       }
       this._messageQueue.initializeTransients();
     }
